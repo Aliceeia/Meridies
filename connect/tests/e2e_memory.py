@@ -88,6 +88,21 @@ with sync_playwright() as pw:
         page.uncheck("#hat")
         print("hat gate: ok")
 
+    if STEP in ("4", "all"):
+        m = page.evaluate("state.memories[0]")
+        print("compass:", page.inner_text("#compass"))
+        r = page.request.post(f"{URL}api/memories/{m['id']}/describe", data={"viewer": "user-a"}, timeout=180_000)
+        body = r.json()
+        print("describe:", r.status, body.get("error") or body["description"]["text"])
+        for kind in ("aerial", "splat"):
+            ir = page.request.get(f"{URL}api/memories/{m['id']}/image/{kind}?viewer=user-a")
+            print(f"  {kind} crop:", ir.status, ir.headers.get("content-type"), len(ir.body()), "bytes")
+            if ir.ok:
+                (OUT / f"step4_{kind}.jpg").write_bytes(ir.body())
+        if r.ok:
+            page.reload(); page.wait_for_function("() => state.memories.length > 0")
+            page.screenshot(path=str(OUT / "step4_described.png"))
+
     b.close()
 
 print("page errors:", errors or "none")

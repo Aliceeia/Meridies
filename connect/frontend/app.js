@@ -421,6 +421,57 @@ $("dismiss").addEventListener("click", () => { if (play.playingId === play.near)
 // first gesture anywhere creates the AudioContext so later chimes can sound
 document.addEventListener("pointerdown", () => audio.ctx(), { once: true });
 
+// ---------- AI description of a place ----------
+function speak(text) {
+  if (state.hatWarning) return toast("Hat is warning — memory muted");
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 0.95;
+  speechSynthesis.speak(u);
+}
+const _setHat = window.setHatWarning;
+window.setHatWarning = (on) => { _setHat(on); if (on) speechSynthesis.cancel(); };
+
+memHooks.push(() => {
+  for (const m of state.memories) {
+    const card = document.getElementById(`mem-${m.id}`);
+    const desc = card.querySelector(".desc"), actions = card.querySelector(".actions");
+    const btn = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; actions.appendChild(b); return b; };
+    if (m.description) {
+      const v = encodeURIComponent(state.user);
+      desc.innerHTML = `<p style="margin:8px 0;font-size:17px"></p>
+        <div class="row"><img alt="Aerial view" src="/api/memories/${m.id}/image/aerial?viewer=${v}" width="120" height="120" style="border-radius:6px">
+        <img alt="Drone scan view" src="/api/memories/${m.id}/image/splat?viewer=${v}" width="120" height="120" style="border-radius:6px"></div>
+        <div class="meta">AI (${m.description.model}) from aerial + drone imagery</div>`;
+      desc.querySelector("p").textContent = m.description.text;
+      btn("🔊 Speak", () => speak(m.description.text));
+    }
+    const d = btn(m.description ? "↻ Describe again" : "✦ Describe place", async () => {
+      d.disabled = true; d.textContent = "Describing…";
+      try {
+        const r = await fetch(`/api/memories/${m.id}/describe`, { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: state.user }) });
+        const body = await r.json();
+        if (!r.ok) throw new Error(body.error);
+        Object.assign(m, body);
+        renderMemories();
+      } catch (e) {
+        d.disabled = false; d.textContent = "✦ Describe place";
+        toast(`Describe failed: ${e.message}`, 6000);
+      }
+    });
+  }
+});
+
+// compass heading once the map is georeferenced against Vexcel
+onWalkerChange(() => {
+  const g = state.plan.georef;
+  if (!g) return;
+  const c = norm360(state.walker.heading - g.rotation_deg);
+  const names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  $("compass").textContent = `${names[Math.round(c / 45) % 8]} (${String(Math.round(c)).padStart(3, "0")}°)`;
+});
+
 // ---------- boot ----------
 async function boot() {
   state.plan = await (await fetch("/api/floorplan")).json();
