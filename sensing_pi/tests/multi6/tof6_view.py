@@ -31,13 +31,17 @@ def parse_args():
     p.add_argument("--max-mm", type=int, default=2000, help="distance shown as black (default 2000)")
     p.add_argument("--tile", choices=("none", "flipx", "flipy", "rot180"), default="none",
                    help="re-orient every 8x8 tile to match how the boards are mounted")
+    p.add_argument("--top-tile", choices=("none", "flipx", "flipy", "rot180"), default="rot180",
+                   help="extra re-orientation for the top row (S1-S3), which is mounted upside down "
+                        "(default rot180)")
     p.add_argument("--speed", type=float, default=1.0, help="playback speed for --file")
     return p.parse_args()
 
 
 class Display:
-    def __init__(self, res, max_mm, tile):
+    def __init__(self, res, max_mm, tile, top_tile="none"):
         self.tile = tile
+        self.row_tile = [top_tile] + ["none"] * (len(C.LAYOUT) - 1)
         rows, cols = len(C.LAYOUT), len(C.LAYOUT[0])
         cmap = plt.get_cmap("gray_r").copy()
         cmap.set_bad("#5a0000")
@@ -59,7 +63,7 @@ class Display:
         self.fig.tight_layout()
 
     def show(self, frame, label):
-        self.im.set_data(C.mosaic(frame, self.tile))
+        self.im.set_data(C.mosaic(frame, self.tile, self.row_tile))
         self.title.set_text(label)
 
     def alive(self):
@@ -96,7 +100,7 @@ def run_live(a):
         f = latest["frame"]
         if f is not None and latest["n"] != shown:
             if disp is None:
-                disp = Display(f["res"], a.max_mm, a.tile)
+                disp = Display(f["res"], a.max_mm, a.tile, a.top_tile)
                 plt.show(block=False)
             n_fps += latest["n"] - shown
             shown = latest["n"]
@@ -129,7 +133,7 @@ def run_file(a):
         sys.exit("no frames in file")
     print(f"{len(frames)} frames, {res}x{res}, {frames[-1]['t'] - frames[0]['t']:.1f} s")
 
-    disp = Display(res, a.max_mm, a.tile)
+    disp = Display(res, a.max_mm, a.tile, a.top_tile)
     state = {"i": 0, "paused": False}
 
     def on_key(ev):

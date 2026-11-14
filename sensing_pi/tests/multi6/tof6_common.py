@@ -62,20 +62,24 @@ def _orient(tile, how):
             "rot180": np.rot90(tile, 2)}[how]
 
 
-def mosaic(frame, tile="none"):
+def mosaic(frame, tile="none", row_tile=None):
     """Combine the six tiles into one (2*res, 3*res) masked array of mm.
-    Invalid zones are masked. `tile` re-orients every tile the same way."""
+    Invalid zones are masked. `tile` re-orients every tile the same way;
+    `row_tile` (one entry per LAYOUT row) adds an extra per-row re-orientation,
+    e.g. for a row of boards mounted upside down."""
     import numpy as np
     res = frame["res"]
     rows = len(LAYOUT)
     cols = len(LAYOUT[0])
     img = np.zeros((rows * res, cols * res), dtype=float)
     bad = np.ones_like(img, dtype=bool)
+    row_tile = row_tile or ["none"] * rows
     for r, layout_row in enumerate(LAYOUT):
         for c, sensor in enumerate(layout_row):
             k = sensor - 1
             d = np.asarray(frame["d"][k], dtype=float).reshape(res, res)
             s = np.asarray(frame["s"][k]).reshape(res, res)
-            img[r * res:(r + 1) * res, c * res:(c + 1) * res] = _orient(d, tile)
-            bad[r * res:(r + 1) * res, c * res:(c + 1) * res] = _orient(~np.isin(s, list(VALID_STATUS)), tile)
+            fix = lambda t: _orient(_orient(t, tile), row_tile[r])  # noqa: E731
+            img[r * res:(r + 1) * res, c * res:(c + 1) * res] = fix(d)
+            bad[r * res:(r + 1) * res, c * res:(c + 1) * res] = fix(~np.isin(s, list(VALID_STATUS)))
     return np.ma.masked_array(img, mask=bad)
