@@ -13,3 +13,4 @@ connect/data/memories/
 connect/data/family_links.json
 connect/tests/out/
 connect/data/memories_archive/
+connect/data/settings.json

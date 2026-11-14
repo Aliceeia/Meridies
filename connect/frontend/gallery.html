@@ -59,6 +59,8 @@
   .mem::before { content: ""; position: absolute; left: -25px; top: 22px; width: 12px; height: 12px; border-radius: 50%;
     background: var(--glow); box-shadow: 0 0 0 4px var(--bg); }
   .mem .cover { border-radius: 12px; aspect-ratio: 4 / 3; }
+  .mem > div { min-width: 0; }            /* lets the one-line transcript end in "…" instead of widening the page */
+  .text p { overflow-wrap: anywhere; }
   .mem .when { color: var(--dim); font-size: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .mem .line { font-size: 20px; margin: 6px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mem .line.quiet { color: var(--faint); font-style: italic; }
@@ -74,6 +76,8 @@
   .badge.private { color: var(--glow); } .badge.family { color: var(--family); } .badge.community { color: var(--shared); }
   .badge.pending { color: var(--dim); }
   .vis { font-size: 14px; padding: 6px 10px; }
+  .sampletag { font-size: 12px; color: var(--faint); border: 1px dashed var(--faint); border-radius: 6px; padding: 0 6px; }
+  #exploreLink, #liveLink { text-decoration: none; } #exploreLink:hover, #liveLink:hover { color: var(--text); }
   @media (max-width: 720px) {
     header, main { padding-left: 16px; padding-right: 16px; }
     .mem { grid-template-columns: 1fr; }
@@ -106,6 +110,8 @@
   <span id="authorControls" hidden>
     <label class="who">You are <select id="user" aria-label="You are"><option value="user-a">User A</option><option value="user-b">User B</option></select></label>
     <button id="familyBtn" hidden>Family link</button>
+    <button id="samplesBtn" hidden title="Sample memories (scripted, spoken by a computer voice). One click hides or shows all of them, everywhere."></button>
+    <a href="/walk" class="who" id="exploreLink">Explore</a>
     <a href="/live" class="who" id="liveLink">Hat (live) →</a>
   </span>
   <button id="listenBtn" aria-keyshortcuts="L" hidden>◐ Listen mode <span class="who">L</span></button>

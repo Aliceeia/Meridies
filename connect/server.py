@@ -95,9 +95,21 @@ def update(mid, fn):
         return m, 200, None
 
 
+SETTINGS = DATA / "settings.json"   # {"hide_samples": bool}; git-ignored
+
+
+def settings() -> dict:
+    try:
+        return json.loads(SETTINGS.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def all_memories():
+    """Every memory, minus the seeded samples while they are hidden (one switch hides them from every view)."""
     files = sorted(f for f in MEM.glob("*.json") if ID_RE.match(f.stem)) if MEM.exists() else []
-    return [json.loads(f.read_text()) for f in files]
+    out = [json.loads(f.read_text()) for f in files]
+    return [m for m in out if not m.get("is_sample")] if settings().get("hide_samples") else out
 
 
 # ---------- family links: a read-only key to one author's family memories ----------
@@ -460,6 +472,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, out)
         if parts == ["api", "gallery"]:
             return self.send(200, gallery(q))
+        if parts == ["api", "settings"]:
+            s = settings()
+            every = [json.loads(f.read_text()) for f in MEM.glob("*.json") if ID_RE.match(f.stem)] if MEM.exists() else []
+            n = sum(1 for m in every if m.get("is_sample"))
+            return self.send(200, {"hide_samples": bool(s.get("hide_samples")), "samples": n, "real": len(every) - n})
         if parts == ["api", "hat", "events"]:
             return self.hat_events()
         if parts == ["api", "live", "stream"]:
@@ -581,6 +598,14 @@ class Handler(BaseHTTPRequestHandler):
             except (urllib.error.URLError, TimeoutError, KeyError, IndexError) as e:
                 return self.err(502, f"couldn't describe: {e!r}"[:200])
             return self.send(200, {"text": text})
+        if parts == ["api", "settings"]:
+            req = json.loads(self.body() or b"{}")
+            if not req.get("viewer"):
+                return self.err(403, "only an author can change this")
+            s = settings()
+            s["hide_samples"] = bool(req.get("hide_samples"))
+            SETTINGS.write_text(json.dumps(s))
+            return self.send(200, {"hide_samples": s["hide_samples"]})
         if parts == ["api", "hat", "button"]:
             req = json.loads(self.body() or b"{}")
             if req.get("button") not in HAT_BUTTONS:

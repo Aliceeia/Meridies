@@ -124,7 +124,7 @@ function renderPlace(p) {
 
 function memCard(m, current) {
   const line = transcriptLine(m), v = visOf(m);
-  const card = el("article", { class: `mem${current ? " current" : ""}`, role: "listitem", id: `m-${m.id}` });
+  const card = el("article", { class: `mem${current ? " current" : ""}${m.is_sample ? " sample" : ""}`, role: "listitem", id: `m-${m.id}` });
   const play = el("button", { class: "play", onclick: () => playMemory(m) }, "▶ Play");
   const toggle = el("button", { class: "showtext", "aria-expanded": "false" }, "▸ show text");
   toggle.onclick = () => {
@@ -146,7 +146,8 @@ function memCard(m, current) {
   card.append(
     coverImg(m, m.cover_source === "camera" ? "Photo from the hat camera" : "View of the spot from the 3D scan"),
     el("div", {},
-      el("div", { class: "when" }, dateHuman(m.created_at), el("span", { class: `badge ${v.cls}` }, v.text)),
+      el("div", { class: "when" }, dateHuman(m.created_at), el("span", { class: `badge ${v.cls}` }, v.text),
+        G.mode === "author" && m.is_sample ? el("span", { class: "sampletag", title: "Sample memory: scripted, computer voice" }, "sample") : null),
       el("div", { class: `line${line.quiet ? " quiet" : ""}`, title: line.text }, line.text),
       controls, toggle, text));
   return card;
@@ -155,7 +156,8 @@ function memCard(m, current) {
 function visSelect(m) {
   const s = el("select", { class: "vis", "aria-label": "Who can hear this memory" });
   for (const [k, v] of Object.entries(VIS)) {
-    const o = el("option", { value: k }, `${v.icon} ${k === "community" ? "Ask to share with community" : v.label}`);
+    const ask = k === "community" && m.visibility !== "community";
+    const o = el("option", { value: k }, `${v.icon} ${ask ? "Ask to share with community" : v.label}`);
     s.append(o);
   }
   s.value = m.visibility;
@@ -204,8 +206,31 @@ if (FAMILY) {
   };
 }
 
+// ---------- sample memories: one click hides (or shows) all of them, in every view ----------
+async function samplesSwitch(set) {
+  const btn = $("samplesBtn");
+  let s = await (await fetch("/api/settings")).json();
+  if (set !== undefined) {
+    await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+                                   body: JSON.stringify({ viewer: G.user, hide_samples: set }) });
+    s = { ...s, hide_samples: set };
+    await load();
+  }
+  btn.hidden = !s.samples;
+  btn.textContent = s.hide_samples ? `Show ${s.samples} samples` : `Hide ${s.samples} samples`;
+  btn.onclick = () => {
+    if (!s.hide_samples && !s.real) {                // never leave the gallery empty in front of someone
+      alert("There are no real recordings yet, so hiding the samples would leave the gallery empty.\n" +
+            "Record one on the Hat page first (or delete the samples with: python connect/tools/seed_samples.py remove).");
+      return;
+    }
+    samplesSwitch(!s.hide_samples);
+  };
+}
+
 // ---------- family link: one read-only link per author; it can be turned off at any time ----------
 if (!FAMILY) {
+  samplesSwitch();
   const dlg = $("famDlg");
   const show = (tok) => {
     $("famUrlRow").hidden = !tok;
