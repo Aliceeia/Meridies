@@ -74,7 +74,8 @@
     return `Memory ${G.memIdx + 1} of ${p.memories.length}. Left ${gx.dateHuman(m.created_at, true)}.${vis}${words} Space to play.`;
   }
   const HELP = "Left and right move between places. Up and down move between memories in a place. " +
-               "Space plays a memory, or stops it. D describes the place. T takes you there, in the 3D walk. " +
+               "Space plays a memory, or stops it. D describes the place. M looks closer, which takes a few seconds. " +
+               "T takes you there, in the 3D walk. " +
                "H repeats this. Escape leaves listen mode.";
 
   // ---------- actions (keyboard and hat share them) ----------
@@ -101,21 +102,25 @@
       const m = mem();
       if (!m) { EAR.edge(); return say("Nothing to describe here."); }
       gx.stopMemory();
+      // cached only: written once when the memory was saved. The live call is M, and only M.
       if (m.description) { EAR.ready(); return say(m.description.text); }
-      if (G.mode !== "author") { EAR.edge(); return say("This place hasn't been described yet."); }
-      say("Looking around. This takes a few seconds.");
+      EAR.edge();
+      say(G.mode === "family" ? "This place hasn't been described yet." : "This place hasn't been described yet. M looks closer.");
+    },
+    async more() {
+      const m = mem();
+      if (!m) { EAR.edge(); return say("Nothing here to look at."); }
+      if (G.mode === "family") { EAR.edge(); return say("Tell me more is not available on a family link."); }
+      gx.stopMemory();
+      say("Looking closer. This takes a few seconds.");
       const beat = setInterval(() => tone(740, 0.05, 0.035), 1600);
       try {
-        const r = await fetch(`/api/memories/${m.id}/describe`, { method: "POST", headers: { "Content-Type": "application/json" },
-                                                                   body: JSON.stringify({ viewer: G.user }) });
-        const body = await r.json();
-        if (!r.ok) throw new Error(body.error);
-        Object.assign(m, body);
+        const body = await gx.tellMeMore(m);
         clearInterval(beat); EAR.ready();
-        if (L.on && mem() === m) say(m.description.text);    // moved on meanwhile: a tone only; D again reads it
+        if (L.on && mem() === m) say(`${body.bearings} ${body.text}`);   // moved on meanwhile: a tone only
       } catch (e) {
         clearInterval(beat); EAR.error();
-        if (L.on && mem() === m) say(e.message || "I couldn't describe this place right now.");
+        if (L.on && mem() === m) say("I couldn't look closer right now.");
       }
     },
     there() {
@@ -149,7 +154,7 @@
   }
 
   const KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", " ": "play",
-                 d: "describe", D: "describe", t: "there", T: "there", h: "help", H: "help", Escape: "leave" };
+                 d: "describe", D: "describe", m: "more", M: "more", t: "there", T: "there", h: "help", H: "help", Escape: "leave" };
   document.addEventListener("keydown", (e) => {
     if (e.target.closest("input, select, textarea")) return;
     if (!L.on && document.querySelector("dialog[open]")) return;       // a dialog owns the keys while it's open

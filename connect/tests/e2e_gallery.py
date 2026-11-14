@@ -26,12 +26,11 @@ LISTEN = "listen" in sys.argv
 
 
 def seed(tmp: Path):
-    """4 sample memories in 3 places: 2 in the La Mirada dining room, 1 Princeton, 1 yard."""
-    mems = [json.loads(f.read_text()) for f in REAL.glob("*.json") if srv.ID_RE.match(f.stem)]
-    mems = [m for m in mems if m.get("is_sample") and m.get("description")]
-    by_b = lambda b: sorted((m for m in mems if m["building_id"] == b), key=lambda m: m["created_at"])  # noqa: E731
-    picked = by_b("zvKHR9DHNjJ")[-2:] + by_b("2K7G7cdukZV")[-1:] + by_b("1PVeAYmPNJz")[-1:]
-    assert len(picked) == 4, "run connect/tools/seed_samples.py first"
+    """4 sample memories in 3 places: 2 in the La Mirada dining room (one is the chandelier note), the Princeton
+    foyer, the Princeton classroom. All given to user-a here."""
+    from connect.tools.seed_samples import sample_id
+    picked = [json.loads((REAL / f"{sample_id(k)}.json").read_text()) for k in ("l-movies", "l-chandelier", "p-alone", "f-maya-talk")]
+    assert all(m.get("description") for m in picked), "run connect/tools/seed_samples.py first"
     for m, v in zip(picked, ["family", "private", "family", "family"]):
         for f in REAL.glob(f"{m['id']}*"):
             shutil.copy(f, tmp / f.name)
@@ -49,6 +48,10 @@ def main():
     tmp = Path(tempfile.mkdtemp(prefix="meridies-e2e-"))
     srv.MEM, srv.LINKS, srv.CIRCLES, srv.SETTINGS, srv.AUTO_PROCESS = tmp, tmp / "l.json", tmp / "c.json", tmp / "s.json", False
     srv.desc.describe = lambda m, d: dict(text="A test description of the spot.", model="test", images=[])   # no Gemini quota
+    from connect.backend import gemini
+    global AI_CALLS
+    AI_CALLS = []
+    gemini.generate = lambda parts, **k: AI_CALLS.append(parts) or "Three sentences from the model."
     seed(tmp)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -177,6 +180,25 @@ def main():
         print(f"take me there: near={near == mid} dist={dist:.2f} m ahead={fwd:.2f} m")
         assert near == mid and dist <= 4 and fwd > 0
 
+        # ---- the hazard and the note left at it line up (geometry, no AI): W next to the chandelier
+        from connect.tools.seed_samples import sample_id
+        page.goto(f"{base}/walk?building=zvKHR9DHNjJ&memory={sample_id('l-chandelier')}&viewer=user-a")
+        page.wait_for_selector("#arrive", timeout=30000)
+        page.keyboard.press("Shift"); page.wait_for_timeout(300)
+        before = len(AI_CALLS)
+        page.keyboard.press("w")
+        page.wait_for_function("document.getElementById('whereText').textContent.includes('Chandelier')", timeout=5000)
+        said = page.inner_text("#whereText")
+        print("W at the chandelier:", said[:200])
+        assert "Chandelier, one metre six" in said and "You left a note here" in said and len(AI_CALLS) == before
+        page.keyboard.press("m")
+        page.wait_for_function("document.getElementById('tellText').textContent.includes('Three sentences')", timeout=20000)
+        assert len(AI_CALLS) == before + 1 and "Careful, the chandelier" in AI_CALLS[-1][0]["text"]
+        print("M (one live call):", page.inner_text("#tellText")[:160])
+        page.evaluate("for (let i = 0; i < 4; i++) { state.walker.heading = (state.walker.heading + 15) % 360; renderWalker(); }")
+        page.wait_for_timeout(300)
+        assert len(AI_CALLS) == before + 1, "movement must never call the AI"
+
         if LISTEN:
             listen(page, base)
         assert not errors, errors
@@ -210,8 +232,14 @@ def listen(page, base):
     assert "Memory 2 of 2" in said()
     page.keyboard.press("Space"); page.wait_for_timeout(900)
     assert page.evaluate("!!gallery.G.audio")
+    n0 = len(AI_CALLS)
     page.keyboard.press("d"); page.wait_for_timeout(200)
     print("  D    ->", said()[:80])
+    assert len(AI_CALLS) == n0, "D must use the cached description"
+    page.keyboard.press("m")
+    page.wait_for_function("(window.__said.slice(-1)[0] || '').includes('Three sentences')", timeout=20000)
+    print("  M    ->", said()[:100])
+    assert len(AI_CALLS) == n0 + 1
     req = urllib.request.Request(base + "/api/hat/button", data=json.dumps({"button": "right"}).encode(), method="POST",
                                  headers={"Content-Type": "application/json"})
     urllib.request.urlopen(req)

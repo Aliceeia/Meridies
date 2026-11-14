@@ -7,7 +7,8 @@
 const $ = (id) => document.getElementById(id);
 const FAMILY = (location.pathname.match(/^\/f\/([\w-]+)/) || [])[1] || null;
 const USERS = { "user-a": "User A", "user-b": "User B" };          // demo accounts (identity is a switch, not a login)
-const nameOf = (id) => USERS[id] || id;
+const NAMES = { ...USERS, maya: "Maya", theo: "Theo" };           // people who may share with you (sample friends)
+const nameOf = (id) => NAMES[id] || id;
 const G = {
   tab: "mine",
   mode: FAMILY ? "family" : "author",   // author | shared | family  (listen.js reads this)
@@ -245,6 +246,16 @@ async function togglePlay(m) {
   announce(ok ? `Playing the memory from ${p.name}.` : "Sorry, this memory couldn't be played.");
 }
 
+// "Tell me more": the one live AI call, at the spot where this memory was left. Explicit requests only.
+async function tellMeMore(m) {
+  const r = await fetch("/api/tell-me-more", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ viewer: G.user, building: m.building_id, x: m.position.x, y: m.position.y,
+                           heading: m.heading_deg ?? null, sweep: m.sweep ?? null }) });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error);
+  return body;
+}
+
 // "Take me there": the 3D space at that spot, with this memory chiming from its own direction
 function takeMeThere(m) {
   return `/walk?${new URLSearchParams({ building: m.building_id, memory: m.id, viewer: G.user })}`;
@@ -267,8 +278,22 @@ function openDetail(m, opener) {
   $("dAbout").textContent = m.description ? m.description.text : "Not described yet.";
   $("dCredit").textContent = [m.description ? `Described from the scan by ${m.description.model}.` : "",
     m.is_sample && G.mode === "author" ? "Sample memory: scripted, read by a computer voice." : ""].filter(Boolean).join(" ");
+  $("dMore").hidden = true; $("dMoreText").textContent = "";
+  const more = el("button", { class: "btn", onclick: async () => {
+    more.disabled = true; more.textContent = "Looking closer…";
+    $("dMore").hidden = false; $("dMoreText").textContent = "Looking closer. This takes a few seconds.";
+    try {
+      const r = await tellMeMore(m);
+      $("dMoreText").textContent = `${r.bearings} ${r.text}`;
+      announce(`${r.bearings} ${r.text}`);
+    } catch (e) {
+      $("dMoreText").textContent = `Couldn't look closer right now. ${e.message}`;
+      announce("Couldn't look closer right now.");
+    }
+    more.disabled = false; more.textContent = "Tell me more";
+  } }, "Tell me more");
   $("dActions").replaceChildren(...(G.mode === "family" ? [] : [
-    el("a", { class: "btn", href: takeMeThere(m), html: `${ICON.there} Take me there` })]));
+    el("a", { class: "btn", href: takeMeThere(m), html: `${ICON.there} Take me there` }), more]));
   const mine = G.mode === "author";
   $("dShare").hidden = !mine;
   $("dFrom").hidden = mine;
@@ -434,5 +459,5 @@ if (FAMILY) {
   renderAccounts(); refreshCircle(); samplesSwitch();
 }
 window.gallery = { G, load, render, playMemory, stopMemory, takeMeThere, visOf, transcriptLine, dateHuman, plural, auth, withAuth,
-                   openDetail, memById };
+                   openDetail, memById, tellMeMore };
 load();

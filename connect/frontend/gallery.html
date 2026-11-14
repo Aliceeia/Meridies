@@ -276,6 +276,11 @@
     <p class="about" id="dAbout"></p>
     <p class="credit" id="dCredit"></p>
     <div class="actions" id="dActions"></div>
+    <section id="dMore" hidden aria-live="polite">
+      <h3 class="section-h">Looking closer</h3>
+      <p class="about" id="dMoreText"></p>
+      <p class="credit">One live look with AI, only when you ask. Directions and distances are measured, not guessed.</p>
+    </section>
     <fieldset class="share" id="dShare">
       <legend class="section-h">Who can hear this</legend>
       <label class="choice"><input type="radio" name="vis" value="private"><b>Only you</b><span class="n">Kept just for you.</span></label>
@@ -306,7 +311,7 @@
 <div id="listen" hidden role="application" aria-roledescription="Listen mode" aria-live="assertive">
   <div class="halo" aria-hidden="true"></div>
   <div id="listenLine"></div>
-  <div id="listenKeys">← → places · ↑ ↓ memories · Space play · D describe · T take me there · H help · Esc leave</div>
+  <div id="listenKeys">← → places · ↑ ↓ memories · Space play · D describe · M tell me more · T take me there · H help · Esc leave</div>
 </div>
 <script src="/gallery.js"></script>
 <script src="/listen.js"></script>

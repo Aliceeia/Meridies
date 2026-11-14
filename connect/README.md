@@ -9,6 +9,24 @@ Two halves, connected by one thing only: a saved recording.
 | `/f/<token>` | Family view: only the owner's `family` memories, read-only. Made and turned off from the gallery's "Family link". |
 | `/walk` | The 3D walk ("Take me there": `/walk?building=&memory=` stands you a few steps from the memory, facing it; first key chimes it). |
 
+### How AI is used: intent decides what plays; AI only generates content, mostly ahead of time
+
+| Request | What answers | Speed |
+|---|---|---|
+| arrive somewhere | memory count + chimes (walk page, local) | instant |
+| "what's around me" (W in the walk, C on /live) | `/api/around`: cached description + bearings from `backend/spatial.py` (maths) | instant, no AI |
+| "play that memory" (Space / Play) | the original recording | instant |
+| "tell me more" (M, or the button) | `/api/tell-me-more`: ONE Gemini call with the first-person render here, the transcripts within 5 m the viewer may hear, and the resolved bearings. The model is told not to state directions or distances; those are spoken from the resolver. | 2–3 s, only on request |
+
+Pre-computed once, after a memory is saved: the transcript and the description of the spot. Nothing calls Gemini on
+movement. **Hazards and memories are linked by geometry:** a memory anchored within 1 m of a hazard is about the same
+thing, so the hazard line carries the note: *"Chandelier, one metre six, three steps ahead. You left a note here last
+week: 'Careful, the chandelier here hangs low'."* Tests: `pytest connect/tests/test_spatial.py`.
+
+Sample memories (`tools/seed_samples.py`, `is_sample: true`): your own in the Princeton foyer and the La Mirada dining
+room, and ones shared with you by two blind friends, Maya and Theo (you're in their circles). Voices are Microsoft
+neural voices via `edge-tts` (seed tool only; `uv pip install edge-tts`), one voice per person.
+
 ### Gallery rules (enforced by the server, tested in `tests/test_gallery_server.py`)
 
 - `visibility`: `private` (default) | `family` | `community`. Only the author changes it. `community` is only ever a

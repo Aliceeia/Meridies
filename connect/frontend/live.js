@@ -207,29 +207,48 @@ async function grabFrame() {
   return new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
 }
 
-$("ctx").onclick = describeAhead;
-async function describeAhead() {
+// C, "what's around me": instant. Cached description + bearings from the resolver, no AI. The hat doesn't know
+// which way you face on the map, so it gives distances, not left/right.
+$("ctx").onclick = aroundMe;
+async function aroundMe() {
   if (L.warning) return;
-  const hadCam = !!camStream;
-  if (!hadCam && !(await setCamera(true))) { tone(196, 0.2); return say("The camera isn't available."); }
-  $("camOn").checked = true;
-  const frame = await grabFrame();
-  if (!frame) { tone(196, 0.2); return say("I couldn't get a picture from the camera."); }
-  $("ctxLine").textContent = "Looking…";
-  say("Looking.");
+  const spot = currentSpot();
+  if (!spot) return say("Choose where you are first.");
+  try {
+    const q = new URLSearchParams({ viewer: L.user, building: $("building").value, x: spot.x.toFixed(2), y: spot.y.toFixed(2) });
+    const r = await (await fetch(`/api/around?${q}`)).json();
+    const text = [r.bearings, r.description ? `Here: ${r.description}` : ""].filter(Boolean).join(" ");
+    $("ctxLine").textContent = text;
+    tone(659, 0.06); say(text);
+  } catch (_) {
+    const msg = `You're at ${spot.label}. The gallery isn't reachable, so that's all I know offline.`;
+    $("ctxLine").textContent = msg;
+    tone(233, 0.2); say(msg);
+  }
+}
+// M, "tell me more": the ONE live AI call, only when asked. Takes a few seconds.
+$("more").onclick = tellMore;
+async function tellMore() {
+  if (L.warning) return;
+  const spot = currentSpot();
+  if (!spot) return say("Choose where you are first.");
+  $("ctxLine").textContent = "Looking closer…";
+  say("Looking closer. This takes a few seconds.");
   const beat = setInterval(() => tone(740, 0.05, 0.04), 1400);
   try {
     const ctl = new AbortController();
-    const to = setTimeout(() => ctl.abort(), 20000);
-    const r = await fetch("/api/live/context", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: frame, signal: ctl.signal });
+    const to = setTimeout(() => ctl.abort(), 25000);
+    const r = await fetch("/api/tell-me-more", { method: "POST", headers: { "Content-Type": "application/json" }, signal: ctl.signal,
+      body: JSON.stringify({ viewer: L.user, building: $("building").value, x: spot.x, y: spot.y, heading: null, sweep: spot.sweep ?? null }) });
     clearTimeout(to);
     const body = await r.json();
     if (!r.ok) throw new Error(body.error);
-    $("ctxLine").textContent = body.text;
-    tone(659, 0.08); say(body.text);
+    const text = `${body.bearings} ${body.text}`;
+    $("ctxLine").textContent = text;
+    tone(659, 0.08); say(text);
   } catch (e) {
     const offline = !navigator.onLine || e.name === "TypeError" || e.name === "AbortError";
-    const msg = offline ? "No connection, so I can't describe what's around you right now." : "I couldn't describe that right now.";
+    const msg = offline ? "No connection, so I can't look closer right now. C still works." : "I couldn't look closer right now.";
     $("ctxLine").textContent = msg;
     tone(233, 0.2); say(msg);
   } finally {
@@ -351,7 +370,8 @@ function connectStream() {
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("select, textarea, input:not([type=checkbox])") || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === "r" || e.key === "R") { e.preventDefault(); $("rec").click(); }
-  else if (e.key === "c" || e.key === "C") { e.preventDefault(); describeAhead(); }
+  else if (e.key === "c" || e.key === "C") { e.preventDefault(); aroundMe(); }
+  else if (e.key === "m" || e.key === "M") { e.preventDefault(); tellMore(); }
 });
 
 // ---------- boot ----------

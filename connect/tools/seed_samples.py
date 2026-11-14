@@ -1,16 +1,17 @@
 """Sample memories so the gallery is never empty. Every one is marked is_sample: true.
 
-    python connect/tools/seed_samples.py            # create (or re-create) the 8 samples
+    python connect/tools/seed_samples.py            # create / update the samples (keeps existing descriptions)
     python connect/tools/seed_samples.py remove     # delete every sample memory and its files
-    (hide/show without deleting: the "Samples" switch in the gallery header, or POST /api/settings)
+    (hide/show without deleting: profile menu -> Demo data, or POST /api/settings)
 
-Each sample: a real sweep in the scan, a heading that has a pre-rendered first-person view, a scripted
-transcript, audio spoken by the Windows voice (Microsoft Zira, offline), the scan cover, and a Gemini
-description from the existing describe pipeline. Yard covers are the drone-scan view (the yard has no
-first-person renders).
+Your own samples (author user-a) and memories two blind friends shared with you (Maya, Theo: you are in their
+circle, so they show under "Shared with me"). Each: a real sweep in the scan, a heading with a pre-rendered
+first-person view (the cover), a scripted transcript, a neural voice (Microsoft Edge voices via edge-tts; one
+voice per person), and a Gemini description from the existing describe pipeline.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import subprocess
@@ -25,29 +26,44 @@ import connect.server as srv  # noqa: E402
 from connect.backend import places  # noqa: E402
 from connect.backend.interior_render import Renderer  # noqa: E402
 
-AUTHOR = "user-a"
 NS = uuid.UUID("6f1c3a52-6a0e-4d1b-9a43-0c2f5d7e9b11")
+ME = "user-a"
+VOICES = {   # one voice per person, so a memory sounds like who left it
+    "user-a": ("en-US-AvaMultilingualNeural", "-4%"),
+    "maya": ("en-US-EmmaMultilingualNeural", "-2%"),
+    "theo": ("en-US-AndrewMultilingualNeural", "-6%"),
+}
+FRIENDS_SHARE_WITH = {"maya": [ME], "theo": [ME]}    # their circles include you
 
-# building, room label (interior) / zone index (yard), key, visibility, days ago, transcript
+# author, building, room label (or "hazard:<kind>"), key, visibility, days ago, transcript
 SAMPLES = [
-    ("2K7G7cdukZV", "Hallway", "p-arrive", "community", 1,
+    (ME, "2K7G7cdukZV", "Hallway", "p-arrive", "community", 1,
      "If you're coming in for the first time: the stairs are straight ahead, and there's a bench along the wall "
      "on your right if you need to wait for someone. It gets loud in here around noon."),
-    ("2K7G7cdukZV", "Hallway", "p-alone", "family", 2,
+    (ME, "2K7G7cdukZV", "Hallway", "p-alone", "family", 2,
      "First time I walked through here on my own, nobody holding my arm. I counted the steps from the door. "
      "Twenty-two. I was so proud I called Mom from right here."),
-    ("2K7G7cdukZV", "Hallway", "p-door", "private", 2,
+    (ME, "2K7G7cdukZV", "Hallway", "p-door", "private", 2,
      "Note to self. The door past the stairs sticks. Push it with your shoulder, not your hand."),
-    ("zvKHR9DHNjJ", "hazard:chandelier", "l-chandelier", "family", 9,
+    (ME, "zvKHR9DHNjJ", "hazard:chandelier", "l-chandelier", "family", 9,
      "Careful, the chandelier here hangs low. Grandpa hit his head on it every single Christmas, and he laughed every time."),
-    ("zvKHR9DHNjJ", "hazard:chandelier", "l-movies", "family", 12,
+    (ME, "zvKHR9DHNjJ", "hazard:chandelier", "l-movies", "family", 12,
      "This is where we'd all pile in for movie night. Someone always fell asleep before the end. Usually Dad."),
-    ("zvKHR9DHNjJ", "hazard:chandelier", "l-radio", "family", 16,
+    (ME, "zvKHR9DHNjJ", "hazard:chandelier", "l-radio", "family", 16,
      "Sunday mornings Grandma kept the radio on, right about here, and the whole house smelled like coffee and toast."),
-    ("1PVeAYmPNJz", 1, "y-swing", "family", 20,
-     "The swing used to hang from this branch. If you pushed hard enough, you could see over the fence into the neighbors' garden."),
-    ("1PVeAYmPNJz", 1, "y-roots", "private", 5,
-     "Mind the roots here, they lift the ground a little. I trip on them every time I'm not paying attention."),
+    # ---- shared with you by blind friends ----
+    ("maya", "2K7G7cdukZV", "Classroom", "f-maya-seats", "family", 3,
+     "Okay, so, this is the classroom upstairs. Third row has the chairs without arms, which are way easier to slide "
+     "into. And the professor stands on the left, so sit on the right if you want to hear her better."),
+    ("maya", "2K7G7cdukZV", "Classroom", "f-maya-talk", "family", 6,
+     "I gave my first presentation in this room. I had my notes in braille on my lap, and I didn't touch them once. "
+     "I'm still kind of proud of that."),
+    ("theo", "zvKHR9DHNjJ", "Kitchen", "f-theo-kettle", "family", 4,
+     "Hey, it's Theo. The kettle's on the counter, right of the sink, and the mugs are in the cupboard just above it, "
+     "second shelf. Help yourself. Seriously."),
+    ("theo", "zvKHR9DHNjJ", "Living Room", "f-theo-piano", "family", 8,
+     "There's an old piano against this wall. Nobody really plays it, but if you hold down the low keys, you can feel "
+     "the whole floor hum under your feet. My niece loves that."),
 ]
 
 
@@ -55,25 +71,30 @@ def sample_id(key: str) -> str:
     return uuid.uuid5(NS, key).hex
 
 
+def delete(mid: str):
+    for f in srv.MEM.glob(f"{mid}*"):
+        f.unlink()
+
+
 def remove() -> int:
     n = 0
-    for m in srv.all_memories():
+    for m in srv.all_memories(include_hidden=True):
         if m.get("is_sample"):
-            for f in srv.MEM.glob(f"{m['id']}*"):
-                f.unlink()
-            n += 1
+            delete(m["id"]); n += 1
+    with srv.MEM_LOCK:                                   # the sample friends leave your circles too
+        c = {k: v for k, v in srv.circles().items() if k not in FRIENDS_SHARE_WITH}
+        srv.CIRCLES.write_text(json.dumps(c, indent=1))
     return n
 
 
-def tts(text: str, out: Path):
-    """Windows SAPI (offline) -> wav -> ogg/opus."""
-    wav = Path(tempfile.mkdtemp()) / "s.wav"
-    ps = ("Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-          "$v = $s.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -like 'en-*' } | Select-Object -First 1; "
-          "if ($v) { $s.SelectVoice($v.VoiceInfo.Name) }; $s.Rate = -1; "
-          f"$s.SetOutputToWaveFile('{wav}'); $s.Speak([Console]::In.ReadToEnd()); $s.Dispose()")
-    subprocess.run(["powershell", "-NoProfile", "-Command", ps], input=text.encode("utf-8"), check=True, capture_output=True)
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(wav), "-ac", "1", "-c:a", "libopus", "-b:a", "32k", str(out)], check=True)
+def speak(text: str, who: str, out: Path):
+    """Neural voice -> ogg/opus, loudness-normalised like a phone recording."""
+    import edge_tts
+    voice, rate = VOICES[who]
+    mp3 = Path(tempfile.mkdtemp()) / "v.mp3"
+    asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(mp3), "-af", "loudnorm=I=-18:TP=-2:LRA=11", "-ac", "1",
+                    "-ar", "48000", "-c:a", "libopus", "-b:a", "48k", str(out)], check=True)
 
 
 def cached_yaws(bid: str, sweep: int) -> list[int]:
@@ -85,7 +106,7 @@ def cached_yaws(bid: str, sweep: int) -> list[int]:
 def spots_interior(bid: str, room: str, n: int):
     """n sweeps in ONE place (same room polygon), each with cached views, plus the heading to face."""
     plan = srv.desc.load_plan(bid)
-    target = None
+    target = want = None
     if room.startswith("hazard:"):
         h = next(h for h in plan["hazards"] if h["kind"] == room.split(":", 1)[1])
         target = h["position"][:2]
@@ -94,86 +115,96 @@ def spots_interior(bid: str, room: str, n: int):
     groups: dict[str, list] = {}
     for s in plan["sweeps"]:
         pid, name = places.place_of(dict(building_id=bid, position=s["position"], sweep=s["index"]), plan)
-        ys = cached_yaws(bid, s["index"])
-        if ys and (room.startswith("hazard:") and pid == want or name == room):
-            groups.setdefault(pid, []).append((s, ys))
+        if (pid == want) if want else (name == room):
+            ys = cached_yaws(bid, s["index"])
+            if ys:
+                groups.setdefault(pid, []).append((s, ys))
     best = max(groups.values(), key=lambda g: (len(g), sum(len(y) for _, y in g)))
-    if target:   # the hazard memory first: the sweep nearest the hazard
+    if target:
         best.sort(key=lambda t: math.hypot(t[0]["position"]["x"] - target[0], t[0]["position"]["y"] - target[1]))
-    else:        # spread out: farthest-first from the group's first sweep
+    else:
         best.sort(key=lambda t: -len(t[1]))
     picked = [best[0]]
-    while len(picked) < n:
+    while len(picked) < min(n, len(best)):
         picked.append(max((t for t in best if t not in picked), key=lambda t: min(
             math.hypot(t[0]["position"]["x"] - p[0]["position"]["x"], t[0]["position"]["y"] - p[0]["position"]["y"]) for p in picked)))
-    rooms = [r for r in plan["rooms"] if places.place_of(dict(building_id=bid, position=picked[0][0]["position"],
-                                                                sweep=picked[0][0]["index"]), plan)[0].endswith(r["id"])]
-    c = rooms[0]["polygon"] if rooms else None
-    cx, cy = (sum(p[0] for p in c) / len(c), sum(p[1] for p in c) / len(c)) if c else (0, 0)
+    while len(picked) < n:
+        picked.append(picked[len(picked) % len(best)])
+    pid = places.place_of(dict(building_id=bid, position=picked[0][0]["position"], sweep=picked[0][0]["index"]), plan)[0]
+    poly = next((r["polygon"] for r in plan["rooms"] if pid.endswith(r["id"])), None)
+    cx, cy = (sum(p[0] for p in poly) / len(poly), sum(p[1] for p in poly) / len(poly)) if poly else (0, 0)
     out = []
     for i, (s, ys) in enumerate(picked):
-        tx, ty = (target if (target and i == 0) else (cx, cy))
+        tx, ty = target if (target and i == 0) else (cx, cy)
         face = math.degrees(math.atan2(tx - s["position"]["x"], ty - s["position"]["y"])) % 360
-        # map heading -> cached yaw k: k = round(-heading / 90) % 4; pick the cached k closest to the wanted heading
         k = min(ys, key=lambda k: abs(((-k * 90) % 360 - face + 540) % 360 - 180))
-        out.append(dict(x=s["position"]["x"], y=s["position"]["y"], sweep=s["index"], heading=(-k * 90) % 360))
+        x, y = s["position"]["x"], s["position"]["y"]
+        if target and i == 0:   # a note about a hazard is left standing under it: anchor 0.6 m from it
+            d = math.hypot(x - target[0], y - target[1])
+            if d > 0.6:
+                x, y = target[0] + 0.6 * (x - target[0]) / d, target[1] + 0.6 * (y - target[1]) / d
+        out.append(dict(x=x, y=y, sweep=s["index"], heading=(-k * 90) % 360))
     return out
 
 
-def spots_yard(zone: int, n: int):
-    plan = srv.desc.load_plan("1PVeAYmPNJz")
-    z = plan["zones"][zone]
-    cx, cy, r = z["center"][0], z["center"][1], z["radius_m"] * 0.45
-    out = []
-    for i in range(n):
-        a = math.radians(40 + i * 150)
-        x, y = cx + r * math.sin(a), cy + r * math.cos(a)
-        out.append(dict(x=x, y=y, sweep=None, heading=(math.degrees(math.atan2(cx - x, cy - y))) % 360))
-    return out
+def save_circles():
+    with srv.MEM_LOCK:
+        c = srv.circles()
+        for who, members in FRIENDS_SHARE_WITH.items():
+            c[who] = sorted(set(c.get(who, [])) | set(members))
+        srv.CIRCLES.write_text(json.dumps(c, indent=1))
 
 
 def create():
-    removed = remove()
     srv.MEM.mkdir(parents=True, exist_ok=True)
+    keep = {sample_id(s[3]) for s in SAMPLES}
+    gone = [m["id"] for m in srv.all_memories(include_hidden=True) if m.get("is_sample") and m["id"] not in keep]
+    for mid in gone:
+        delete(mid)
     spots: dict[tuple, list] = {}
-    for bid, where, *_ in SAMPLES:
-        spots.setdefault((bid, where), [])
+    for _, bid, where, *_ in SAMPLES:
+        spots[(bid, where)] = []
     for (bid, where) in spots:
-        n = sum(1 for s in SAMPLES if (s[0], s[1]) == (bid, where))
-        spots[(bid, where)] = spots_interior(bid, where, n) if isinstance(where, str) else spots_yard(where, n)
+        spots[(bid, where)] = spots_interior(bid, where, sum(1 for s in SAMPLES if (s[1], s[2]) == (bid, where)))
     used: dict[tuple, int] = {}
     now = datetime.now(timezone.utc).replace(microsecond=0)
-    made = []
-    for bid, where, key, vis, days, text in SAMPLES:
+    for author, bid, where, key, vis, days, text in SAMPLES:
         i = used.get((bid, where), 0)
         used[(bid, where)] = i + 1
-        sp = spots[(bid, where)][i]
-        mid = sample_id(key)
-        tts(text, srv.MEM / f"{mid}.ogg")
-        when = now - timedelta(days=days, hours=(hash(key) % 9), minutes=(hash(key) % 50))
-        meta = dict(id=mid, position=dict(x=round(sp["x"], 3), y=round(sp["y"], 3), z=1.5), building_id=bid, author_id=AUTHOR,
-                    created_at=when.isoformat(timespec="seconds"), visibility=vis, draft=False, share_request=None, reports=[],
-                    description=None, audio_type="audio/ogg", audio_file=f"{mid}.ogg", heading_deg=round(sp["heading"], 1),
+        sp, mid = spots[(bid, where)][i], sample_id(key)
+        old = srv.load(mid) if (srv.MEM / f"{mid}.json").exists() else {}
+        for f in srv.MEM.glob(f"{mid}.*"):
+            if f.suffix != ".json":
+                f.unlink()                                   # the old (robotic) audio
+        speak(text, author, srv.MEM / f"{mid}.ogg")
+        same_spot = old.get("sweep") == sp["sweep"] and old.get("heading_deg") == round(sp["heading"], 1)
+        meta = dict(id=mid, position=dict(x=round(sp["x"], 3), y=round(sp["y"], 3), z=1.5), building_id=bid, author_id=author,
+                    created_at=old.get("created_at") or (now - timedelta(days=days, hours=len(key) % 9, minutes=len(text) % 50)).isoformat(),
+                    visibility=vis, draft=False, share_request=None, reports=[],
+                    description=old.get("description") if same_spot else None,
+                    audio_type="audio/ogg", audio_file=f"{mid}.ogg", heading_deg=round(sp["heading"], 1), sweep=sp["sweep"],
                     is_sample=True, transcript=dict(status="done", text=text, source="script", at=now.isoformat()))
-        if sp["sweep"] is not None:
-            meta["sweep"] = sp["sweep"]
         if vis == "community":   # sample data: marked as seeded, never as a human review
             meta["share_request"] = dict(status="approved", requested_at=now.isoformat(),
                                          review=dict(reviewer="sample-seed (not a human review)", status="approved"))
+        if not same_spot:
+            for f in srv.MEM.glob(f"{mid}_*.jpg"):
+                f.unlink()
         srv.save(meta)
-        cover = srv.cover_file(meta)
-        print(f"{key:13} {bid} sweep={meta.get('sweep')} heading={meta['heading_deg']:5.1f} {vis:9} cover={cover.name if cover else None}",
-              flush=True)
-        made.append(mid)
-    for mid in made:   # the existing Gemini describe pipeline (first-person + aerial + plan for interiors)
-        m = srv.load(mid)
+        srv.cover_file(meta)
+        print(f"{key:14} {author:7} {bid} sweep={sp['sweep']:>3} {vis:9} voice={VOICES[author][0]}", flush=True)
+    for author, bid, where, key, *_ in SAMPLES:
+        m = srv.load(sample_id(key))
+        if m.get("description"):
+            continue
         try:
             d = srv.desc.describe(m, srv.MEM)
-            srv.update(mid, lambda m: m.__setitem__("description", d))
-            print(f"described {mid[:8]}: {d['text'][:90]}…", flush=True)
+            srv.update(m["id"], lambda m: m.__setitem__("description", d))
+            print(f"described {key}: {d['text'][:80]}…", flush=True)
         except Exception as e:  # noqa: BLE001
-            print(f"describe {mid[:8]} FAILED: {e!r}"[:200], flush=True)
-    print(f"{len(made)} samples created ({removed} old samples replaced)")
+            print(f"describe {key} FAILED: {e!r}"[:200], flush=True)
+    save_circles()
+    print(f"{len(SAMPLES)} samples ready, {len(gone)} removed; circles: {FRIENDS_SHARE_WITH}")
 
 
 if __name__ == "__main__":

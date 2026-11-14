@@ -161,10 +161,56 @@ function whereAmI() {
   parts.push(near ? `${near === 1 ? "A memory is" : `${near} memories are`} close by.` : "No memories right here.");
   return parts.join(" ");
 }
-$("whereami").addEventListener("click", () => {
-  const text = whereAmI();
+// "What's around me" is instant: the room and doorways from the plan (above), hazards with any note left at
+// them, nearby memories and the cached description from the server's spatial resolver. No AI on this path.
+async function aroundMe() {
+  const w = state.walker, s = sweepAt(w.sweep);
+  const local = whereAmI().split(/(?<=\.)\s+/).filter((p) => !/^(Mind your head|No memories|A memory is|\d+ memories)/.test(p));
+  try {
+    const q = new URLSearchParams({ viewer: state.user, building: state.plan.building.id, x: w.x.toFixed(2), y: w.y.toFixed(2),
+                                    heading: w.heading.toFixed(0), floor: (s && s.floor) || 0 });
+    const r = await (await fetch(`/api/around?${q}`)).json();
+    return [...local, ...r.hazard_lines, r.memory_line, r.description ? `Here: ${r.description}` : ""].filter(Boolean).join(" ");
+  } catch (_) {
+    return whereAmI();                       // server unreachable: the local version still answers
+  }
+}
+$("whereami").addEventListener("click", async () => {
+  const text = await aroundMe();
   $("whereText").textContent = text;
   speak(text);
+});
+
+// "Tell me more": the ONE live AI call, only when asked (button or M). Directions come from the resolver, the
+// three sentences from Gemini (the render here + the notes within 5 m).
+async function tellMeMore() {
+  const w = state.walker;
+  $("tellText").textContent = "Looking closer…";
+  if (typeof startThinking === "function") startThinking();
+  try {
+    const r = await fetch("/api/tell-me-more", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viewer: state.user, building: state.plan.building.id, x: w.x, y: w.y, heading: w.heading,
+                             sweep: w.sweep }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error);
+    const text = `${body.bearings} ${body.text}`;
+    $("tellText").textContent = text;
+    if (typeof stopThinking === "function") stopThinking();
+    speak(text);
+  } catch (e) {
+    if (typeof stopThinking === "function") stopThinking();
+    $("tellText").textContent = `Couldn't look closer right now: ${e.message}`;
+    speak("I couldn't look closer right now. Where am I still works.");
+  }
+}
+$("tellmore").addEventListener("click", tellMeMore);
+document.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (e.target.closest("select, input, textarea") || (k !== "m" && k !== "w") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if ((typeof rec !== "undefined" && rec.mr) || window.afterRecordBusy) return;
+  e.preventDefault();
+  if (k === "m") tellMeMore();
+  else if (!(typeof blind !== "undefined" && blind.on)) $("whereami").click();   // blindfold mode binds W itself
 });
 
 // ---------- a recording lands where it was made ----------

@@ -80,9 +80,11 @@
   </section>
 
   <section aria-labelledby="ctxTitle">
-    <h2 id="ctxTitle">Camera</h2>
-    <button id="ctx">👁 What's around me? <span class="key">C</span></button>
+    <h2 id="ctxTitle">Around you</h2>
+    <button id="ctx">What's around me? <span class="key">C</span></button>
+    <button id="more" style="width:100%;margin-top:10px">Tell me more <span class="key">M</span></button>
     <div id="ctxLine" role="status" aria-live="polite"></div>
+    <div style="font-size:13px;color:var(--faint);margin-top:6px">C is instant, from what's already known. M asks the AI once, takes a few seconds.</div>
     <label class="row"><input type="checkbox" id="camOn"> Camera on (a frame goes with each recording, as its cover)</label>
     <video id="cam" autoplay muted playsinline hidden></video>
   </section>

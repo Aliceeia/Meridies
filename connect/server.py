@@ -105,11 +105,11 @@ def settings() -> dict:
         return {}
 
 
-def all_memories():
+def all_memories(include_hidden=False):
     """Every memory, minus the seeded samples while they are hidden (one switch hides them from every view)."""
     files = sorted(f for f in MEM.glob("*.json") if ID_RE.match(f.stem)) if MEM.exists() else []
     out = [json.loads(f.read_text()) for f in files]
-    return [m for m in out if not m.get("is_sample")] if settings().get("hide_samples") else out
+    return [m for m in out if not m.get("is_sample")] if settings().get("hide_samples") and not include_hidden else out
 
 
 # ---------- MeriCircle: the people an author shares "family" memories with ----------
@@ -341,10 +341,46 @@ def start_hat_relay():
     print(f"  /live: listening for the hat on {HAT_ENDPOINT}", flush=True)
 
 
-LIVE_PROMPT = ("This photo is from a camera on a blind person's hat, looking where they face. In one or two short "
-               "sentences, say what is directly ahead and anything close on the left or right that matters for "
-               "walking or for knowing where they are. Body-relative only (ahead, left, right), never compass "
-               "directions. No colours. English.")
+# ---------- "what's around me" (instant: maths + cache) and "tell me more" (the one live AI call) ----------
+PEOPLE = {"user-a": "User A", "user-b": "User B", "maya": "Maya", "theo": "Theo"}   # display names (demo)
+name_of = lambda a: PEOPLE.get(a, a)  # noqa: E731
+TELL_ME_MORE_PROMPT = ("A blind person is standing here. These are their own notes left at this spot. Combine what you "
+                       "see with what they recorded into three sentences. Do not state directions or distances — those "
+                       "are supplied separately. Do not mention colours.")
+
+
+def audible(viewer: str, fam: str | None, bid: str) -> list[dict]:
+    return [m for m in all_memories() if m["building_id"] == bid and can_see(m, viewer, fam)]
+
+
+def around_here(bid: str, x: float, y: float, heading, viewer: str, fam=None, floor: int = 0) -> dict:
+    from connect.backend import spatial
+    return spatial.around(desc.load_plan(bid), x, y, heading, audible(viewer, fam, bid), viewer, name_of, floor)
+
+
+def tell_me_more(bid: str, x: float, y: float, heading, sweep, viewer: str) -> dict:
+    """Context: the first-person render here, the transcripts of memories within 5 m, the resolved bearings.
+    One Gemini call. Directions and distances come from the resolver, never from the model."""
+    import time as _t
+    from connect.backend import gemini, spatial
+    plan = desc.load_plan(bid)
+    res = spatial.around(plan, x, y, heading, audible(viewer, None, bid), viewer, name_of)
+    notes = [m for m in audible(viewer, None, bid) if m["id"] in res["memories_near"] and (m.get("transcript") or {}).get("text")]
+    if plan["kind"] == "interior":
+        sw = int(sweep) if sweep is not None else desc.nearest_sweep(plan, x, y)
+        image, what = desc.first_person(bid, sw, heading or 0.0), "what is in front of them at eye level, from a 3D scan"
+    else:
+        image, what = desc.splat_crop(plan, x, y), "the spot seen from above, from a drone scan"
+    lines = [TELL_ME_MORE_PROMPT, f"The image shows {what}."]
+    lines.append("Their notes:" if notes else "There are no notes here yet; describe only what you see.")
+    for m in notes[:6]:
+        who = "their own note" if m["author_id"] == viewer else f"a note a friend, {name_of(m['author_id'])}, shared with them"
+        lines.append(f"- ({who}) \"{m['transcript']['text']}\"")
+    lines.append(f"For your understanding only, do not repeat: {res['bearings']}")
+    t0 = _t.monotonic()
+    text = gemini.generate([{"text": "\n".join(lines)}, gemini.image_part(image)], timeout=20, retries=1)
+    print(f"  tell-me-more: {gemini.last_model} {_t.monotonic() - t0:.1f}s, {len(notes)} notes", flush=True)
+    return {"bearings": res["bearings"], "text": text, "model": gemini.last_model, "notes": [m["id"] for m in notes]}
 
 
 def gallery(q: dict) -> dict:
@@ -498,6 +534,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, out)
         if parts == ["api", "gallery"]:
             return self.send(200, gallery(q))
+        if parts == ["api", "around"]:
+            # "what's around me": instant, no AI. Cached description + bearings from the spatial resolver.
+            try:
+                bid = q.get("building") or DEFAULT_BUILDING
+                x, y = float(q["x"]), float(q["y"])
+                heading = float(q["heading"]) if q.get("heading", "") != "" else None
+                floor = int(q.get("floor") or 0)
+            except (KeyError, ValueError) as e:
+                return self.err(400, f"bad request: {e!r}")
+            if bid not in desc.BUILDINGS:
+                return self.err(404, "unknown building")
+            viewer, fam = who(q)
+            return self.send(200, around_here(bid, x, y, heading, viewer, fam, floor))
         if parts == ["api", "circle"]:
             viewer = q.get("viewer", "")
             return self.send(200, {"members": circles().get(viewer, []) if viewer else [],
@@ -612,22 +661,26 @@ class Handler(BaseHTTPRequestHandler):
                 update(m["id"], lambda m: m.__setitem__("transcript", {"status": "pending"}))
             WORKER.submit(process, m["id"])
             return self.send(202, {"queued": m["id"]})
-        if parts == ["api", "live", "context"]:
-            # camera context on demand: one frame in, one or two spoken sentences out. The frame is not kept.
-            n = int(self.headers.get("Content-Length") or 0)
-            if not 0 < n <= MAX_FRAME:
-                return self.err(400, "frame missing or larger than 3 MB")
-            data = self.rfile.read(n)
-            if data[:2] != b"\xff\xd8":
-                return self.err(400, "not a JPEG")
-            from connect.backend import gemini
+        if parts == ["api", "tell-me-more"]:
+            # the ONLY live AI call, and only on an explicit request
             try:
-                text = gemini.generate([{"text": LIVE_PROMPT}, gemini.image_part(data)], timeout=15, retries=1)
+                req = json.loads(self.body() or b"{}")
+                bid = req["building"]
+                x, y = float(req["x"]), float(req["y"])
+                heading = None if req.get("heading") is None else float(req["heading"])
+            except (KeyError, ValueError, TypeError) as e:
+                return self.err(400, f"bad request: {e!r}")
+            if bid not in desc.BUILDINGS:
+                return self.err(404, "unknown building")
+            try:
+                return self.send(200, tell_me_more(bid, x, y, heading, req.get("sweep"), req.get("viewer") or ""))
             except LookupError as e:
                 return self.err(503, str(e))
+            except urllib.error.HTTPError as e:
+                return self.err(429 if e.code == 429 else 502,
+                                "The Gemini quota is used up for today." if e.code == 429 else f"Gemini answered {e.code}")
             except (urllib.error.URLError, TimeoutError, KeyError, IndexError) as e:
-                return self.err(502, f"couldn't describe: {e!r}"[:200])
-            return self.send(200, {"text": text})
+                return self.err(502, f"couldn't reach Gemini: {e!r}"[:200])
         if parts == ["api", "circle"]:
             # the author sets who is in their circle; members see the author's family memories under "Shared with me"
             req = json.loads(self.body() or b"{}")

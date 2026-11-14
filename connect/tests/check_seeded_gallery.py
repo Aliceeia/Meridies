@@ -55,6 +55,17 @@ with sync_playwright() as pw:
     assert not [c for c in cards if not (c["cover"] and c["audio_s"] > 1 and c["transcript"] and c["desc"])]
     assert page.locator(".entry").count() == len(cards)
 
+    page.locator(".tab", has_text="Shared with me").click()
+    page.wait_for_function("document.getElementById('pageTitle').textContent.includes('with you')")
+    page.wait_for_selector(".entry")
+    settle(page)
+    shared = page.locator(".entry").count()
+    print("shared with me:", shared, "|", page.inner_text("#lede"), "|",
+          [c.replace("\n", " ") for c in page.locator(".chip").all_inner_texts()])
+    assert shared >= 1
+    page.screenshot(path=str(OUT / "seeded_shared.png"))
+    page.locator(".tab", has_text="Memories").click()
+    page.wait_for_function("document.getElementById('pageTitle').textContent.includes('memories')")
     page.locator(".entry .excerpt").first.click()
     page.wait_for_selector("#detail[open]")
     page.wait_for_timeout(700)

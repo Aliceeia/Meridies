@@ -33,7 +33,8 @@ OUT.mkdir(exist_ok=True)
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="meridies-live-"))
     srv.MEM, srv.LINKS, srv.AUTO_PROCESS = tmp, tmp / "links.json", False
-    gemini.generate = lambda parts, **k: "A doorway is two steps ahead; a chair is on your left."
+    ai_calls = []
+    gemini.generate = lambda parts, **k: ai_calls.append(parts) or "There's a doorway and a chair close by."
     pub = zmq.Context.instance().socket(zmq.PUB)
     port = pub.bind_to_random_port("tcp://127.0.0.1")
     srv.HAT_ENDPOINT = f"tcp://127.0.0.1:{port}"
@@ -111,11 +112,16 @@ def main():
         print("warning mid-recording:", page.inner_text("#recLine"), "| drafts:", len(drafts))
         assert len(drafts) == 1 and drafts[0]["visibility"] == "private"
 
-        # ---- camera context on demand
+        # ---- C "what's around me": instant, no AI. M "tell me more": exactly one AI call
         page.wait_for_function("document.getElementById('state').textContent === 'Clear'", timeout=5000)
         page.keyboard.press("c")
-        page.wait_for_function("document.getElementById('ctxLine').textContent.includes('doorway')", timeout=10000)
-        print("context:", page.inner_text("#ctxLine"))
+        page.wait_for_function("document.getElementById('ctxLine').textContent.includes(\"You're in the\")", timeout=5000)
+        print("C (no AI):", page.inner_text("#ctxLine")[:110], "| AI calls:", len(ai_calls))
+        assert ai_calls == []
+        page.keyboard.press("m")
+        page.wait_for_function("document.getElementById('ctxLine').textContent.includes('doorway')", timeout=20000)
+        print("M (one AI call):", page.inner_text("#ctxLine")[:110], "| AI calls:", len(ai_calls))
+        assert len(ai_calls) == 1
 
         # ---- the page itself loads with no network
         page.wait_for_function("navigator.serviceWorker.controller !== null || true")
