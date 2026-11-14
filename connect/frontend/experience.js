@@ -9,7 +9,7 @@
 
 const SHOW = "https://my.matterport.com/show/?play=1&qs=1&help=0&hl=0&brand=0&title=0&dh=0&gt=0&hr=0&mt=0&f=0&fp=0&vr=0&search=0&pin=0&portal=0&tourcta=0&wh=0";
 const VFOV_DEG = 73;          // showcase camera, vertical (approx.; 1280x800 renders span ~100 deg horizontally)
-const MAX_LIST = 3;
+const MAX_LIST = 1;           // only the nearest memory expands; the rest collapse to one line
 const scenes = [$("sc0"), $("sc1")];
 let front = 0, sceneKey = null, syncTimer = null, stale = false;
 
@@ -113,9 +113,11 @@ function tidyList() {
     card.classList.toggle("far-hidden", i >= MAX_LIST);
   });
   const rest = ranked.length - MAX_LIST;
-  const where = isInterior() ? "in this house" : "around here";
+  const close = ranked.slice(MAX_LIST).filter((r) => r.d <= 8).length;
   $("more").textContent = ranked.length === 0 ? "Nothing left here yet. Be the first."
-    : rest > 0 ? `${rest} more ${where}` : "";
+    : rest <= 0 ? "" : close === rest ? `${rest} more nearby`
+    : close ? `${close} more nearby, ${rest - close} elsewhere in the ${isInterior() ? "house" : "yard"}`
+    : `${rest} more elsewhere in the ${isInterior() ? "house" : "yard"}`;
 }
 
 // ---------- where am I (local data only: instant, no API calls) ----------

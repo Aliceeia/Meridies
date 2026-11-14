@@ -592,9 +592,10 @@ memHooks.push(() => {
         if (!r.ok) throw new Error(body.error);
         Object.assign(m, body);
         renderMemories();
+        document.dispatchEvent(new CustomEvent("described", { detail: m }));
       } catch (e) {
         d.disabled = false; d.textContent = "✦ Describe place";
-        toast(`Describe failed: ${e.message}`, 6000);
+        document.dispatchEvent(new CustomEvent("describe-failed", { detail: e.message }));
       }
     });
   }

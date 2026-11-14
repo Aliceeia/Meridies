@@ -216,9 +216,13 @@ class Handler(BaseHTTPRequestHandler):
             except LookupError as e:
                 return self.err(503, str(e))
             except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    return self.err(429, "The free Gemini quota is used up for today on every model. It resets tomorrow.")
+                if e.code == 503:
+                    return self.err(503, "Gemini is overloaded right now. Try again in a minute.")
                 return self.err(502, f"{e.url.split('?')[0]} answered {e.code}: {e.read()[:200].decode(errors='replace')}")
             except (urllib.error.URLError, KeyError, IndexError, TimeoutError) as e:
-                return self.err(502, f"description failed: {e!r}")
+                return self.err(502, f"Couldn't describe this place: {e!r}"[:200])
             save(m)
             return self.send(200, public(m))
         return self.err(404, "not found")

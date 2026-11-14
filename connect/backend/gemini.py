@@ -44,7 +44,9 @@ def image_part(data: bytes, mime: str = "image/jpeg") -> dict:
     return {"inline_data": {"mime_type": mime, "data": base64.b64encode(data).decode()}}
 
 
-FALLBACKS = ("gemini-3.7-flash", "gemini-3.6-flash")  # each model has its own free-tier quota
+# Each model has its own free-tier quota (20 requests/day each), so a longer chain survives a demo day.
+FALLBACKS = ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest",
+             "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest")
 last_model = None  # the model that produced the most recent answer
 
 
@@ -73,8 +75,8 @@ def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: 
                 if e.code == 503 and attempt < retries - 1:
                     time.sleep(5 * (attempt + 1))
                     continue
-                if e.code in (429, 503):
-                    break          # quota or overload: next model
+                if e.code in (429, 503, 404):
+                    break          # quota, overload, or model not offered to this key: next model
                 raise
     raise err
 
