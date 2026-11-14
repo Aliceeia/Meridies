@@ -5,11 +5,11 @@ A frame is a dict:
 where each of d[k] / s[k] is a flat list of res*res values in the sensor's own zone order.
 """
 
-N_SENSORS = 6
-LPN_PINS = [17, 27, 22, 23, 24, 25]   # S1..S6, BCM numbering
-INT_PINS = [5, 6, 13, 19, 26, 16]     # S1..S6, BCM numbering
-ADDRS = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35]
-DEFAULT_ADDR = 0x29
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # sensing_pi/
+from sensors.pins import ADDRS, DEFAULT_ADDR, INT_PINS, LPN_PINS, N_SENSORS  # noqa: E402,F401
 
 # Physical arrangement as seen from behind the sensors (sensor numbers, 1-based).
 LAYOUT = [[1, 2, 3],

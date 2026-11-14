@@ -1,0 +1,22 @@
+{
+  "_comment": "Flat bench plate: 6 x VL53L5CX all facing forward in parallel. Origin = plate centre (between the rows, middle column); x forward, y right, z up, metres. Rows: S1 S2 S3 (top) / S4 S5 S6 (bottom), seen from behind. 2.5 cm between neighbours in a row, 4 cm between rows. Bottom row is mounted rotated 180 deg (roll 180). If the plate is worn, add the plate-to-head-centre offset to every x_m/z_m.",
+  "fov_deg": 45.0,
+  "range_model": "radial",
+  "min_range_m": 0.10,
+  "floor_z_m": null,
+  "zone_flip_h": false,
+  "zone_flip_v": true,
+  "_zone_flip_note": "zone_flip_v from the 2026-11-14 live run: desk seen 7-14 cm BELOW the plate only with true. zone_flip_h not yet confirmed (hand test).",
+  "sensors": [
+    {"id": "S1", "az_deg": 0, "el_deg": 0, "roll_deg": 0,   "x_m": 0.0, "y_m": -0.025, "z_m":  0.02, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S2", "az_deg": 0, "el_deg": 0, "roll_deg": 0,   "x_m": 0.0, "y_m":  0.0,   "z_m":  0.02, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S3", "az_deg": 0, "el_deg": 0, "roll_deg": 0,   "x_m": 0.0, "y_m":  0.025, "z_m":  0.02, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S4", "az_deg": 0, "el_deg": 0, "roll_deg": 180, "x_m": 0.0, "y_m": -0.025, "z_m": -0.02, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S5", "az_deg": 0, "el_deg": 0, "roll_deg": 180, "x_m": 0.0, "y_m":  0.0,   "z_m": -0.02, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S6", "az_deg": 0, "el_deg": 0, "roll_deg": 180, "x_m": 0.0, "y_m":  0.025, "z_m": -0.02, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0}
+  ],
+  "objects": {
+    "_band_note": "Bench: the plate stands ~10 cm above the desk, so drop points below -7 cm (the desk). Widen this when the plate is worn.",
+    "band_z_m": [-0.07, 1.0]
+  }
+}
