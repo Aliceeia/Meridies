@@ -10,6 +10,8 @@ Usage:
     python engine.py                      # connects to tcp://localhost:5556
     python engine.py --endpoint tcp://192.168.1.5:5556
     python engine.py --list-devices
+    python engine.py --device "Jerry"     # substring match against device name,
+                                            # instead of trusting the system default
 """
 import argparse
 import json
@@ -68,11 +70,26 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint", default="tcp://localhost:5556")
     parser.add_argument("--list-devices", action="store_true")
+    parser.add_argument("--device", default=None,
+                         help="substring to match against an output device name "
+                              "(e.g. 'Jerry') — explicit, doesn't depend on the "
+                              "system default, which a long-running stream won't "
+                              "follow if it changes after startup anyway")
     args = parser.parse_args()
 
     if args.list_devices:
         print(sd.query_devices())
         return
+
+    device = None
+    if args.device:
+        matches = [d for d in sd.query_devices()
+                   if args.device.lower() in d["name"].lower() and d["max_output_channels"] > 0]
+        if not matches:
+            print(f"engine: no output device matching '{args.device}' — run --list-devices")
+            return
+        device = matches[0]["name"]
+        print(f"engine: using output device '{device}'")
 
     bank = SoundBank()
     mixer = Mixer(bank)
@@ -97,6 +114,7 @@ def main():
         channels=2,
         dtype="float32",
         callback=callback,
+        device=device,
     ):
         print("engine: running. Ctrl+C to stop.")
         try:

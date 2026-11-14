@@ -1,5 +1,5 @@
-slab
 numpy
+scipy
 soundfile
 sounddevice
 pyzmq

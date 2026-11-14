@@ -1,0 +1,8 @@
+.env
+.venv/
+.uv-cache/
+.mpl-cache/
+mp_out/
+__pycache__/
+.ipynb_checkpoints/
+connect/data/cache/

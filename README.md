@@ -16,7 +16,8 @@ sensing (A) --5555--> integration (C) --5556--> audio (B)
 - `integration/` — obstacle selection, launcher, testing (Person C). Publishes
   `[{"id","az","dist","level"}, ...]` on port 5556.
 - `audio/` — spatial audio engine (Person B). Subscribes to port 5556, plays
-  HRTF-rendered binaural warnings. See `audio/README.md`.
+  directional warnings via live ITD/ILD panning and distance-based
+  loudness/reverb (no HRTF). See `audio/README.md`.
 
 **Azimuth convention** (shared across all three): 0° = straight ahead,
 negative = left, positive = right, looking down at the wearer from above.

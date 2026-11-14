@@ -1,0 +1,311 @@
+"""Memory layer server: static frontend + walk map + memory store.
+
+    python connect/server.py            # http://localhost:8765
+
+Stdlib only. Memories live on disk in connect/data/memories/ (git-ignored):
+<id>.json (metadata) next to <id>.<ext> (audio).
+
+Identity is a demo switch (author_id sent by the client), not authentication.
+"""
+from __future__ import annotations
+
+import base64
+import io
+import json
+import math
+import mimetypes
+import os
+import re
+import urllib.error
+import urllib.request
+import uuid
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+HERE = Path(__file__).resolve().parent
+FRONT = HERE / "frontend"
+DATA = HERE / "data"
+MEM = DATA / "memories"
+PORT = 8765
+MAX_AUDIO = 5 * 2**20            # backstop; opus is ~15-30 KB/s, the page stops at 4.5 MB or 5 min first
+AUDIO_EXT = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav"}
+ID_RE = re.compile(r"^[0-9a-f]{32}$")
+PUBLIC_DATA = {"floorplan.json", "splat_topdown.jpg"}
+
+
+# ---------- AI description: see connect/backend/describe.py ----------
+import sys  # noqa: E402
+sys.path.insert(0, str(HERE.parent))
+from connect.backend import describe as desc  # noqa: E402
+
+DEFAULT_BUILDING = "zvKHR9DHNjJ"  # the interior scan; the yard (1PVeAYmPNJz) is the second building
+VIEW_LOCK = __import__("threading").Lock()  # one headless render at a time
+
+
+def view_png(bid: str, sweep: int, heading_deg: float) -> bytes:
+    """First-person view at a sweep, heading snapped to the nearest of the 4 pre-rendered yaws."""
+    import math as _m
+    from connect.backend.interior_render import Renderer
+    k = round(((-heading_deg) % 360) / 90) % 4          # map heading is clockwise, showcase yaw counter-clockwise
+    with VIEW_LOCK, Renderer(model=bid) as r:
+        jpg = r.cache_path(sweep + 1, f"0.000,{k * _m.pi / 2:.3f}").with_suffix(".jpg")
+        if not jpg.exists():                              # ~10x smaller than the PNG master
+            from PIL import Image
+            Image.open(io.BytesIO(r.render_view(sweep, k * _m.pi / 2))).convert("RGB").save(jpg, "JPEG", quality=85)
+        return jpg.read_bytes()
+
+
+def load(mid):
+    return json.loads((MEM / f"{mid}.json").read_text())
+
+
+def save(meta):
+    MEM.mkdir(parents=True, exist_ok=True)
+    (MEM / f"{meta['id']}.json").write_text(json.dumps(meta, indent=1))
+
+
+def can_see(meta, viewer):
+    return meta["author_id"] == viewer or meta["visibility"] == "community"
+
+
+COMPASS_RE = re.compile(r"\b(north|south|east|west)(ern|ward|-?east|-?west)?\b", re.I)
+
+
+def is_public_space(bid: str) -> bool:
+    """Community sharing exists only in public spaces (museums, campuses, parks).
+    The flag lives in the building record; a missing flag means NOT public."""
+    try:
+        return desc.load_plan(bid)["building"].get("public") is True
+    except (KeyError, OSError, ValueError):
+        return False
+
+
+def apply_choice(m: dict, choice: str, reason: str) -> tuple[int, str | None]:
+    """The only place that changes who may hear a memory. Private unless explicitly shared AND reviewed.
+    Returns (http status, error)."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if choice == "private":
+        m.update(visibility="private", draft=False)
+        if m.get("share_request"):
+            m["share_request"]["status"] = "withdrawn"
+    elif choice == "later":
+        m.update(visibility="private", draft=True)
+    elif choice == "share":
+        if not is_public_space(m["building_id"]):
+            return 403, "community sharing is only available in public spaces"
+        from connect.backend import moderation
+        review = moderation.review_share_request(MEM / m["audio_file"], m)
+        # visibility stays private until a reviewer approves; the stub never approves
+        m.update(draft=False, share_request={"status": review["status"], "requested_at": now, "review": review})
+        if review["status"] == "approved":
+            m["visibility"] = "community"
+    else:
+        return 400, "choice must be private, share or later"
+    m.setdefault("decisions", []).append({"choice": choice, "reason": reason, "at": now})
+    return 200, None
+
+
+def public(meta, viewer=None):
+    out = {k: v for k, v in meta.items() if k not in ("audio_file", "decisions")}
+    if out.get("share_request") and viewer != meta.get("author_id"):
+        out["share_request"] = {"status": out["share_request"]["status"]}   # review details are the author's business
+    out["reports"] = len(meta.get("reports") or []) if viewer != meta.get("author_id") else meta.get("reports") or []
+    d = out.get("description")
+    if d and COMPASS_RE.search(d.get("text", "")):
+        out["description"] = None   # written before descriptions became body-relative: ask again rather than say "south"
+    out["audio"] = f"/api/memories/{meta['id']}/audio"
+    return out
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        print(f"{self.command} {self.path.split('?')[0]} -> {args[1] if len(args) > 1 else ''}", flush=True)
+
+    # helpers
+    def send(self, code, body=b"", ctype="application/json"):
+        if isinstance(body, (dict, list)):
+            body = json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def err(self, code, msg):
+        self.send(code, {"error": msg})
+
+    def body(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_AUDIO:
+            raise ValueError("body too large")
+        return self.rfile.read(n)
+
+    def file(self, path: Path, ctype=None):
+        if not path.is_file():
+            return self.err(404, "not found")
+        self.send(200, path.read_bytes(), ctype or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+
+    # routes
+    def do_GET(self):
+        u = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        parts = [p for p in u.path.split("/") if p]
+        if not parts:
+            return self.file(FRONT / "index.html")
+        if parts[0] == "data" and len(parts) == 2 and parts[1] in PUBLIC_DATA:
+            return self.file(DATA / parts[1])
+        if parts == ["api", "floorplan"]:
+            bid = q.get("building") or DEFAULT_BUILDING
+            if bid not in desc.BUILDINGS:
+                return self.err(404, f"unknown building {bid}")
+            fp = desc.load_plan(bid)
+            fp.pop("meta", None)
+            return self.send(200, fp)
+        if parts == ["api", "view"]:
+            bid = q.get("building") or DEFAULT_BUILDING
+            if desc.BUILDINGS.get(bid, ("", ""))[1] != "interior":
+                return self.err(404, "no first-person views for this building")
+            try:
+                png = view_png(bid, int(q["sweep"]), float(q.get("heading", 0)))
+            except (KeyError, ValueError) as e:
+                return self.err(400, f"bad request: {e}")
+            except TimeoutError as e:
+                return self.err(504, str(e))
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(png)))
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            return self.wfile.write(png)
+        if parts == ["api", "buildings"]:
+            out = []
+            for bid in desc.BUILDINGS:
+                fp = desc.load_plan(bid)
+                out.append(dict(id=bid, name=fp["building"]["name"], kind=fp["kind"], default=bid == DEFAULT_BUILDING,
+                                public=fp["building"].get("public") is True))
+            return self.send(200, out)
+        if parts == ["api", "memories"]:
+            viewer, bid = q.get("viewer", ""), q.get("building_id")
+            out = []
+            for f in sorted(MEM.glob("*.json")) if MEM.exists() else []:
+                m = json.loads(f.read_text())
+                if can_see(m, viewer) and (bid is None or m["building_id"] == bid):
+                    out.append(public(m, viewer))
+            return self.send(200, out)
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "audio" and ID_RE.match(parts[2]):
+            try:
+                m = load(parts[2])
+            except FileNotFoundError:
+                return self.err(404, "no such memory")
+            if not can_see(m, q.get("viewer", "")):
+                return self.err(403, "private memory")
+            return self.file(MEM / m["audio_file"], m["audio_type"])
+        if (len(parts) == 5 and parts[:2] == ["api", "memories"] and parts[3] == "image"
+                and parts[4] in ("aerial", "splat", "firstperson", "topdown", "aerial2", "topdown2") and ID_RE.match(parts[2])):
+            try:
+                m = load(parts[2])
+            except FileNotFoundError:
+                return self.err(404, "no such memory")
+            if not can_see(m, q.get("viewer", "")):
+                return self.err(403, "private memory")
+            return self.file(MEM / f"{m['id']}_{parts[4]}.jpg", "image/jpeg")
+        if len(parts) == 1 and (FRONT / parts[0]).is_file():
+            return self.file(FRONT / parts[0])
+        return self.err(404, "not found")
+
+    def do_POST(self):
+        u = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        parts = [p for p in u.path.split("/") if p]
+        if parts == ["api", "memories"]:
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip()
+            if ctype not in AUDIO_EXT:
+                return self.err(415, f"audio type {ctype!r} not accepted")
+            try:
+                audio = self.body()
+                pos = {k: round(float(q[k]), 3) for k in ("x", "y", "z")}
+                author, bid = q["author_id"], q["building_id"]
+            except (KeyError, ValueError) as e:
+                return self.err(400, f"bad request: {e}")
+            if not audio or not author or not bid:
+                return self.err(400, "empty audio, author_id or building_id")
+            mid = uuid.uuid4().hex
+            MEM.mkdir(parents=True, exist_ok=True)
+            fname = f"{mid}.{AUDIO_EXT[ctype]}"
+            (MEM / fname).write_bytes(audio)
+            # Private by default, always. draft=1 comes from an interrupted recording.
+            meta = dict(id=mid, position=pos, building_id=bid, author_id=author,
+                        created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        visibility="private", draft=q.get("draft") in ("1", "true"), share_request=None,
+                        reports=[],   # reserved for listener reports (not implemented yet)
+                        description=None, audio_type=ctype, audio_file=fname)
+            try:  # optional: where the person faced, and which sweep they stood at (interior)
+                if "heading_deg" in q:
+                    meta["heading_deg"] = round(float(q["heading_deg"]) % 360, 1)
+                if q.get("sweep", "") != "":
+                    meta["sweep"] = int(q["sweep"])
+            except ValueError as e:
+                return self.err(400, f"bad request: {e}")
+            save(meta)
+            return self.send(201, public(meta, author))
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "decision" and ID_RE.match(parts[2]):
+            try:
+                m, req = load(parts[2]), json.loads(self.body() or b"{}")
+            except (FileNotFoundError, ValueError):
+                return self.err(404, "no such memory")
+            if req.get("viewer") != m["author_id"]:
+                return self.err(403, "only the author decides who hears a memory")
+            code, error = apply_choice(m, req.get("choice"), str(req.get("reason", "chosen"))[:40])
+            if error:
+                return self.err(code, error)
+            save(m)
+            return self.send(200, public(m, m["author_id"]))
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "describe" and ID_RE.match(parts[2]):
+            try:
+                m, req = load(parts[2]), json.loads(self.body() or b"{}")
+            except (FileNotFoundError, ValueError):
+                return self.err(404, "no such memory")
+            if not can_see(m, req.get("viewer", "")):
+                return self.err(403, "private memory")
+            try:
+                m["description"] = desc.describe(m, MEM)
+            except LookupError as e:
+                return self.err(503, str(e))
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    return self.err(429, "The free Gemini quota is used up for today on every model. It resets tomorrow.")
+                if e.code == 503:
+                    return self.err(503, "Gemini is overloaded right now. Try again in a minute.")
+                return self.err(502, f"{e.url.split('?')[0]} answered {e.code}: {e.read()[:200].decode(errors='replace')}")
+            except (urllib.error.URLError, KeyError, IndexError, TimeoutError) as e:
+                return self.err(502, f"Couldn't describe this place: {e!r}"[:200])
+            save(m)
+            return self.send(200, public(m, req.get("viewer")))
+        return self.err(404, "not found")
+
+    def do_PATCH(self):
+        parts = [p for p in urlparse(self.path).path.split("/") if p]
+        if len(parts) == 3 and parts[:2] == ["api", "memories"] and ID_RE.match(parts[2]):
+            try:
+                m, req = load(parts[2]), json.loads(self.body() or b"{}")
+            except (FileNotFoundError, ValueError):
+                return self.err(404, "no such memory")
+            if req.get("viewer") != m["author_id"]:
+                return self.err(403, "only the author can change visibility")
+            if req.get("visibility") not in ("private", "community"):
+                return self.err(400, "visibility must be private or community")
+            # "community" is only ever a REQUEST (pending_review); "private" always works, at any time.
+            code, error = apply_choice(m, "share" if req["visibility"] == "community" else "private", "toggle")
+            if error:
+                return self.err(code, error)
+            save(m)
+            return self.send(200, public(m, m["author_id"]))
+        return self.err(404, "not found")
+
+
+if __name__ == "__main__":
+    print(f"memory layer on http://localhost:{PORT}")
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
