@@ -22,7 +22,18 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "connect" / "data"
 CACHE = DATA / "cache" / "interior"
-MODEL = sys.argv[1] if len(sys.argv) > 1 else "zvKHR9DHNjJ"
+import argparse  # noqa: E402
+
+_ap = argparse.ArgumentParser()
+_ap.add_argument("model", nargs="?", default="zvKHR9DHNjJ")
+_ap.add_argument("--out", default=None, help="output file in connect/data (default: interior_floorplan.json for the house)")
+_ap.add_argument("--public", action="store_true", help="a public space (museum, campus, park): community sharing allowed")
+_ap.add_argument("--space-kind", default="private_residence")
+_ap.add_argument("--name", default=None)
+_ap.add_argument("--api-sid", default=None, help="the model's id in the hackathon catalog, if different")
+ARGS = _ap.parse_args()
+MODEL = ARGS.model
+OUT = DATA / (ARGS.out or ("interior_floorplan.json" if MODEL == "zvKHR9DHNjJ" else f"interior_{MODEL}.json"))
 
 
 def capture(model: str) -> dict:
@@ -108,10 +119,20 @@ def main():
           f"up is {'+' if h > 0 else '-'}{'XYZ'[axis]}, camera height {abs(h):.3f} m")
     if axis != 2 or h < 0:
         raise SystemExit("expected +Z up (Model API frame); refusing to guess a conversion")
-    floor_z = float(np.median(floor[:, 2]))
-    print(f"floor z = {floor_z:+.3f} (median over sweeps, spread {np.ptp(floor[:, 2]):.2f} m)")
+    # floors: ordered bottom-up by the median height of their sweeps; z=0 is the lowest floor
+    fz = {}
+    for l in locs:
+        fz.setdefault(l["floor"]["id"], []).append(l["position"]["z"])
+    order = sorted(fz, key=lambda f: float(np.median(fz[f])))
+    floor_z = float(np.median(fz[order[0]]))
+    fidx = {f: i for i, f in enumerate(order)}
+    names = ["Ground floor", "Upper floor"] if len(order) == 2 else [f"Floor {i + 1}" for i in range(len(order))]
+    if len(order) == 1:
+        names = ["Ground floor"]
+    floors = [dict(index=i, id=f, z=round(float(np.median(fz[f])) - floor_z, 2), name=names[i]) for i, f in enumerate(order)]
+    print(f"floors: {[(f['name'], f['z'], len(fz[f['id']])) for f in floors]}")
 
-    sweeps = [dict(index=l["index"], id=l["id"], label=l["pano"].get("label"),
+    sweeps = [dict(index=l["index"], id=l["id"], label=l["pano"].get("label"), floor=fidx[l["floor"]["id"]],
                    position=dict(x=round(l["position"]["x"], 3), y=round(l["position"]["y"], 3),
                                  z=round(l["position"]["z"] - floor_z, 3)),
                    camera_height_m=round(l["pano"]["position"]["z"] - l["position"]["z"], 3),
@@ -121,8 +142,9 @@ def main():
     # rooms -> walkable polygons (the wall graph: rooms are cycles of wall/boundary edges)
     rb = cap["GetRoomBounds"]["data"]["model"]
     edges = {e["id"]: e for f in rb["floors"] for e in f["edges"]}
+    edge_floor = {e["id"]: fidx.get(f["id"], 0) for f in rb["floors"] for e in f["edges"]}
     vpos = {v["id"]: (v["position"]["x"], v["position"]["y"]) for e in edges.values() for v in e["vertices"]}
-    rooms, walkable = [], []
+    rooms, walkable, unclosed = [], [], {}
     for r in rb["rooms"]:
         label = (r.get("label") or (r["classifications"][0]["label"] if r["classifications"] else "Room"))
         if "nonArea" in (r.get("keywords") or []) or "hide" in (r.get("keywords") or []):
@@ -130,14 +152,29 @@ def main():
         poly = chain([edges[e["id"]] for e in r["boundary"]["edges"] if e["id"] in edges], vpos)
         if poly is None or len(poly) < 3:
             print("  could not close room", label)
+            unclosed.setdefault(fidx.get((r.get("floor") or {}).get("id"), 0), []).append(label)
             continue
-        rooms.append(dict(id=r["id"], label=label, polygon=[[round(x, 3), round(y, 3)] for x, y in poly],
+        rooms.append(dict(id=r["id"], label=label, floor=fidx.get((r.get("floor") or {}).get("id"), 0),
+                          polygon=[[round(x, 3), round(y, 3)] for x, y in poly],
                           area_m2=round((r.get("dimensionEstimates") or {}).get("area") or 0, 1),
                           ceiling_min_m=(r.get("ceiling") or {}).get("minHeight")))
         walkable.append(rooms[-1]["polygon"])
+    in_room = lambda s: [r for r in rooms if r["floor"] == s["floor"] and inside(s["position"]["x"], s["position"]["y"], r["polygon"])]
+    homeless = {}
     for s in sweeps:
-        hit = [r for r in rooms if inside(s["position"]["x"], s["position"]["y"], r["polygon"])]
-        s["room"] = hit[0]["label"] if hit else "Outside"
+        if not in_room(s):
+            homeless[s["floor"]] = homeless.get(s["floor"], 0) + 1
+    for s in sweeps:
+        hit = in_room(s)
+        if hit:
+            s["room"] = hit[0]["label"]
+        elif s["floor"] > 0 and s["position"]["z"] < floors[s["floor"]]["z"] - 1:
+            s["room"] = "Stairs"
+        elif homeless.get(s["floor"], 0) >= 5 and len(set(unclosed.get(s["floor"], []))) == 1:
+            # a whole area of this floor sits in the one room whose outline didn't close (not a lone porch)
+            s["room"] = unclosed[s["floor"]][0]
+        else:
+            s["room"] = "Outside"
     # number repeated labels so every room name is unique ("Bedroom 1", "Bedroom 2")
     counts = {}
     for r in rooms:
@@ -145,7 +182,7 @@ def main():
     print(f"rooms: {len(rooms)} kept -> {sorted(counts.items())}")
     print("sweeps per room:", sorted({s['room'] for s in sweeps}))
     openings = [dict(type=o["type"], label=o["label"], width_m=round(o["width"], 2), top_m=round(o["height"] + o["lowerElevation"], 2),
-                     bottom_m=round(o["lowerElevation"], 2), center=midpoint(e, o, vpos))
+                     bottom_m=round(o["lowerElevation"], 2), center=midpoint(e, o, vpos), floor=edge_floor[e["id"]])
                 for e in edges.values() for o in e.get("openings") or []]
 
     vm = (cap.get("GetModelViewPrefetch") or {}).get("data", {}).get("model", {})
@@ -165,27 +202,28 @@ def main():
                       method="Matterport showcase geocoordinates (east,north = R(theta) p + t), verified by eye on Vexcel; ~2-3 m offset",
                       convention="east,north = R_ccw(rotation_deg) @ [x,y]; compass heading = map heading - rotation_deg")
     out = dict(
-        building=dict(model_id=MODEL, id=MODEL, name=cap.get("title", MODEL),
-                      public=False, space_kind="private_residence",   # community sharing only in public spaces
+        building=dict(model_id=MODEL, id=MODEL, name=ARGS.name or cap.get("title", MODEL),
+                      public=bool(ARGS.public), space_kind=ARGS.space_kind,   # community sharing only in public spaces
+                      **({"api_sid": ARGS.api_sid} if ARGS.api_sid else {}),
                       lat=geo and geo["latitude"], lon=geo and geo["longitude"]),
         start_sweep=start_sweep,
         sweeps=sweeps, walkable=walkable, hazards=[], rooms=rooms, openings=openings,
         walls=[dict(a=vpos[e["vertices"][0]["id"]], b=vpos[e["vertices"][1]["id"]], type=e["type"],
-                    thickness=e.get("thickness")) for e in edges.values()],
+                    thickness=e.get("thickness"), floor=edge_floor[e["id"]]) for e in edges.values()],
+        floors=floors,
         geocoordinates=geo, georef=georef,
         meta=dict(source="public showcase page data (MP_PREFETCHED_MODELDATA, GetModelViewPrefetch, GetRoomBounds)",
                   frame="metres, Model API frame (+Z up, measured), floor z=0",
                   showcase_ss="ss = index + 1 (1-based, measured)"),
     )
     DATA.mkdir(parents=True, exist_ok=True)
-    prev = DATA / "interior_floorplan.json"
-    if prev.exists():  # keep hazards produced by interior_hazards.py
-        old = json.loads(prev.read_text())
+    if OUT.exists():  # keep hazards produced by interior_hazards.py
+        old = json.loads(OUT.read_text())
         out["hazards"] = old.get("hazards", [])
         if "hazards" in old.get("meta", {}):
             out["meta"]["hazards"] = old["meta"]["hazards"]
-    (DATA / "interior_floorplan.json").write_text(json.dumps(out, indent=1))
-    print(f"wrote {DATA / 'interior_floorplan.json'}: {len(sweeps)} sweeps")
+    OUT.write_text(json.dumps(out, indent=1))
+    print(f"wrote {OUT}: {len(sweeps)} sweeps, public={out['building']['public']}")
 
 
 if __name__ == "__main__":
