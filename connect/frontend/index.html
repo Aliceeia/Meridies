@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridies Memories</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #9aa4af;
+    --walk: #3fd0e0; --zone: #e3b341; --walker: #ffffff; --rec: #ff4d4f; --mem: #a371f7; --community: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 18px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; height: 100vh; }
+  #mapwrap { position: relative; min-height: 0; }
+  svg#map { width: 100%; height: 100%; display: block; background: #000; cursor: crosshair; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 20px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 18px; }
+  h1 { font-size: 26px; margin: 0; }
+  .addr { color: var(--dim); font-size: 16px; }
+  .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .label { color: var(--dim); font-size: 14px; text-transform: uppercase; letter-spacing: .06em; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button, select { font: inherit; font-size: 18px; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: #21262d; color: var(--text); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--dim); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .hint { color: var(--dim); font-size: 15px; }
+  #toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); background: #000c;
+    padding: 10px 18px; border-radius: 10px; font-size: 20px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; } }
+</style>
+</head>
+<body>
+<main>
+  <div id="mapwrap">
+    <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Walk map"></svg>
+    <div id="toast" role="status"></div>
+  </div>
+  <aside>
+    <div>
+      <h1 id="bname">Loading…</h1>
+      <div class="addr" id="baddr"></div>
+    </div>
+
+    <section>
+      <div class="label">Walker</div>
+      <div class="big"><span id="hdg">000</span>° <span id="zone" style="font-size:20px;font-weight:500;color:var(--zone)"></span></div>
+      <div class="hint" id="pos"></div>
+      <div class="hint">Click the map to walk there. ← → turn, ↑ ↓ step. Heading is in the map frame (not north).</div>
+    </section>
+  </aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

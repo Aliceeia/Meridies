@@ -1,8 +1,10 @@
 {
  "building": {
+  "id": "1PVeAYmPNJz",
   "name": "4606 Kinglet St",
   "address": "4606 Kinglet St, Houston, TX, 77035, US",
-  "sid": "1PVeAYmPNJz"
+  "lat": 29.6603594,
+  "lon": -95.4546392
  },
  "walkable": [
   [
@@ -586,117 +588,10 @@
    -24.0
   ]
  ],
- "hazards": [
-  {
-   "position": [
-    10.21,
-    -1.49
-   ],
-   "height_m": 1.74,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    0.21,
-    3.46
-   ],
-   "height_m": 1.65,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    13.71,
-    5.42
-   ],
-   "height_m": 1.72,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    2.57,
-    3.12
-   ],
-   "height_m": 1.68,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    3.62,
-    -18.43
-   ],
-   "height_m": 1.66,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    9.73,
-    5.32
-   ],
-   "height_m": 1.68,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    8.71,
-    -5.71
-   ],
-   "height_m": 1.93,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    9.12,
-    5.88
-   ],
-   "height_m": 1.69,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    -1.38,
-    -19.25
-   ],
-   "height_m": 1.73,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    4.38,
-    -17.25
-   ],
-   "height_m": 1.76,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    5.62,
-    -12.0
-   ],
-   "height_m": 1.67,
-   "kind": "overhang"
-  },
-  {
-   "position": [
-    9.75,
-    6.62
-   ],
-   "height_m": 1.74,
-   "kind": "overhang"
-  }
- ],
  "zones": [
   {
-   "id": "z1",
-   "name": "Yard, +X side",
-   "center": [
-    8.28,
-    0.52
-   ],
-   "radius_m": 5.2
-  },
-  {
-   "id": "z2",
-   "name": "Yard, +X side",
+   "id": "zA",
+   "name": "Yard A, right of house",
    "center": [
     17.33,
     5.66
@@ -704,8 +599,17 @@
    "radius_m": 6.0
   },
   {
-   "id": "z3",
-   "name": "Yard, +X side",
+   "id": "zB",
+   "name": "Yard B, right of house",
+   "center": [
+    8.28,
+    0.52
+   ],
+   "radius_m": 5.2
+  },
+  {
+   "id": "zC",
+   "name": "Yard C, lower right of house",
    "center": [
     15.8,
     -7.52
@@ -713,8 +617,8 @@
    "radius_m": 5.4
   },
   {
-   "id": "z4",
-   "name": "Yard, -Y side",
+   "id": "zD",
+   "name": "Yard D, lower right of house",
    "center": [
     10.57,
     -16.55
@@ -722,6 +626,15 @@
    "radius_m": 6.1
   }
  ],
+ "backdrop": {
+  "image": "splat_topdown.jpg",
+  "extent": [
+   -25.0,
+   25.0,
+   -25.0,
+   25.0
+  ]
+ },
  "meta": {
   "source": "aerial Gaussian splat, first 150 MB (2,313,029 of 7,608,486 Gaussians)",
   "frame": "metres; splat local frame re-levelled so +Z is up and floor is z=0; recentred on the house; NOT north-aligned",
@@ -732,132 +645,6 @@
    0.9999
   ],
   "floor_offset_raw": -0.361,
-  "hazard_band_m": [
-   1.6,
-   2.1
-  ],
-  "walkable_below_m": 0.5,
-  "hazard_detail": [
-   {
-    "position": [
-     10.21,
-     -1.49
-    ],
-    "height_m": 1.74,
-    "kind": "overhang",
-    "extent_m2": 2.62,
-    "points": 472
-   },
-   {
-    "position": [
-     0.21,
-     3.46
-    ],
-    "height_m": 1.65,
-    "kind": "overhang",
-    "extent_m2": 0.38,
-    "points": 35
-   },
-   {
-    "position": [
-     13.71,
-     5.42
-    ],
-    "height_m": 1.72,
-    "kind": "overhang",
-    "extent_m2": 0.38,
-    "points": 85
-   },
-   {
-    "position": [
-     2.57,
-     3.12
-    ],
-    "height_m": 1.68,
-    "kind": "overhang",
-    "extent_m2": 0.31,
-    "points": 17
-   },
-   {
-    "position": [
-     3.62,
-     -18.43
-    ],
-    "height_m": 1.66,
-    "kind": "overhang",
-    "extent_m2": 0.31,
-    "points": 45
-   },
-   {
-    "position": [
-     9.73,
-     5.32
-    ],
-    "height_m": 1.68,
-    "kind": "overhang",
-    "extent_m2": 0.31,
-    "points": 34
-   },
-   {
-    "position": [
-     8.71,
-     -5.71
-    ],
-    "height_m": 1.93,
-    "kind": "overhang",
-    "extent_m2": 0.19,
-    "points": 35
-   },
-   {
-    "position": [
-     9.12,
-     5.88
-    ],
-    "height_m": 1.69,
-    "kind": "overhang",
-    "extent_m2": 0.19,
-    "points": 27
-   },
-   {
-    "position": [
-     -1.38,
-     -19.25
-    ],
-    "height_m": 1.73,
-    "kind": "overhang",
-    "extent_m2": 0.12,
-    "points": 11
-   },
-   {
-    "position": [
-     4.38,
-     -17.25
-    ],
-    "height_m": 1.76,
-    "kind": "overhang",
-    "extent_m2": 0.12,
-    "points": 8
-   },
-   {
-    "position": [
-     5.62,
-     -12.0
-    ],
-    "height_m": 1.67,
-    "kind": "overhang",
-    "extent_m2": 0.12,
-    "points": 10
-   },
-   {
-    "position": [
-     9.75,
-     6.62
-    ],
-    "height_m": 1.74,
-    "kind": "overhang",
-    "extent_m2": 0.12,
-    "points": 26
-   }
-  ]
+  "walkable_below_m": 0.5
  }
 }

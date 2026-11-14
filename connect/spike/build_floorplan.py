@@ -6,12 +6,12 @@ Reads a prefix of the model's Gaussian splat (Gaussians are stored in no spatial
 order, so the first N MB is a fair sample), then:
   1. detects the vertical axis empirically (RANSAC ground plane, not an assumption)
   2. estimates the ground/floor height from the height histogram (z=0 is not the floor)
-  3. HAZARDS: clusters at 1.6-2.1 m above the floor with open space below (head height)
-  4. WALKABLE: cells with points < 0.5 m above the floor and no body-height obstacle
-  5. writes floorplan.json + a debug PNG
+  3. WALKABLE: cells with points < 0.5 m above the floor and no body-height obstacle
+  4. writes floorplan.json (walkable polygon + zones) and splat_topdown.jpg (map backdrop)
 
+Hazards are deliberately not computed here: obstacles are the hardware half's job.
 NOTE: these splats are aerial (drone) reconstructions of the property's exterior,
-so "floor" is the ground and hazards are eaves/branches/carport edges.
+so "floor" is the ground (a yard), not an interior.
 """
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ SID = sys.argv[1] if len(sys.argv) > 1 else "1PVeAYmPNJz"  # 4606 Kinglet St, Ho
 PREFIX_MB = 150
 HALF = 25.0      # metres around the scene centre
 CELL = 0.25      # grid cell, metres
-HAZ_LO, HAZ_HI = 1.6, 2.1
 WALK_HI = 0.5
 BODY_LO, BODY_HI = 0.5, 1.5
 
@@ -196,8 +195,7 @@ def main():
 
     ground = count((h > -0.25) & (h < WALK_HI))
     body = count((h >= BODY_LO) & (h < BODY_HI))
-    head = count((h >= HAZ_LO) & (h <= HAZ_HI))
-    print(f"cells: ground {np.mean(ground >= 3):.0%}, body-height {np.mean(body >= 3):.0%}, head-height {np.mean(head >= 3):.0%}")
+    print(f"cells: ground {np.mean(ground >= 3):.0%}, body-height {np.mean(body >= 3):.0%}")
 
     # 5. walkable
     blocked = ndimage.binary_dilation(body >= 3, iterations=1)
@@ -223,30 +221,7 @@ def main():
     poly = dp_simplify(outer, 0.3)
     print(f"walkable polygon: {len(outer)} -> {len(poly)} vertices")
 
-    # 4. hazards: head-height returns with open space beneath, near walkable ground
-    near_walk = ndimage.binary_dilation(walk, iterations=4)
-    haz = (head >= 3) & (body < 2) & near_walk
-    hl, hk = ndimage.label(haz)
-    hazards = []
-    cell_of = np.full((nx, nx), -1)
-    for lab_id in range(1, hk + 1):
-        cells = np.argwhere(hl == lab_id)
-        if len(cells) < 2:
-            continue
-        cxy = (cells.mean(0) + 0.5) * CELL - HALF
-        m = inb & (h >= HAZ_LO) & (h <= HAZ_HI)
-        sel = m.copy()
-        sel[m] = hl[ij[m, 0], ij[m, 1]] == lab_id
-        hs, col = h[sel], rgb[sel].mean(0)
-        kind = "branch" if col[1] > col[0] * 1.08 and col[1] > col[2] * 1.08 else "overhang"
-        hazards.append(dict(position=[round(float(cxy[0]), 2), round(float(cxy[1]), 2)],
-                            height_m=round(float(np.percentile(hs, 10)), 2), kind=kind,
-                            extent_m2=round(len(cells) * CELL**2, 2), points=int(sel.sum())))
-    hazards.sort(key=lambda d: -d["extent_m2"])
-    hazards = hazards[:20]
-    print(f"hazards: {hk} raw clusters -> {len(hazards)} kept")
-    for d in hazards[:8]:
-        print("   ", d)
+    # (Hazards are the hardware half's concern; this file is the memory layer's walk map only.)
 
     # zones: 4 clusters of walkable cells (k-means), named by direction from the house
     wc = (np.argwhere(walk) + 0.5) * CELL - HALF
@@ -256,48 +231,53 @@ def main():
         a = np.argmin(((wc[:, None] - cent[None]) ** 2).sum(-1), 1)
         cent = np.array([wc[a == j].mean(0) if (a == j).any() else cent[j] for j in range(4)])
     zones = []
-    for j, cxy in enumerate(cent):
-        members = wc[a == j]
-        ang = np.degrees(np.arctan2(cxy[1], cxy[0])) % 360
-        side = ["+X side", "+Y side", "-X side", "-Y side"][int(((ang + 45) % 360) // 90)]
-        zones.append(dict(id=f"z{j + 1}", name=f"Yard, {side}", center=[round(float(cxy[0]), 2), round(float(cxy[1]), 2)],
+    dirs = ["above", "upper right of", "right of", "lower right of", "below", "lower left of", "left of", "upper left of"]
+    bearing = lambda c: np.degrees(np.arctan2(c[0], c[1])) % 360  # clockwise from map +Y (map frame, not north)
+    for j in np.argsort([bearing(c) for c in cent]):
+        cxy, members = cent[j], wc[a == j]
+        letter = "ABCD"[len(zones)]
+        where = dirs[int(((bearing(cxy) + 22.5) % 360) // 45)]
+        zones.append(dict(id=f"z{letter}", name=f"Yard {letter}, {where} house",
+                          center=[round(float(cxy[0]), 2), round(float(cxy[1]), 2)],
                           radius_m=round(float(np.percentile(np.linalg.norm(members - cxy, axis=1), 70)), 1)))
 
     out = dict(
-        building=dict(name=str(row["name"]), address=str(row["address"]), sid=SID),
+        building=dict(id=SID, name=str(row["name"]), address=str(row["address"]),
+                      lat=float(row["lat"]), lon=float(row["lon"])),
         walkable=[[round(float(x), 2), round(float(y), 2)] for x, y in poly],
-        hazards=[{k: v for k, v in d.items() if k in ("position", "height_m", "kind")} for d in hazards],
         zones=zones,
+        backdrop=dict(image="splat_topdown.jpg", extent=[-HALF, HALF, -HALF, HALF]),  # x0 x1 y0 y1, metres
         meta=dict(
             source=f"aerial Gaussian splat, first {PREFIX_MB} MB ({len(g):,} of {total:,} Gaussians)",
             frame="metres; splat local frame re-levelled so +Z is up and floor is z=0; recentred on the house; NOT north-aligned",
             up_axis_detected=f"{'+' if n[axis] > 0 else '-'}{'XYZ'[axis]}",
             ground_normal_raw=[round(float(v), 4) for v in n],
             floor_offset_raw=round(raw_floor, 3),
-            hazard_band_m=[HAZ_LO, HAZ_HI], walkable_below_m=WALK_HI,
-            hazard_detail=hazards,
+            walkable_below_m=WALK_HI,
         ),
     )
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / "floorplan.json").write_text(json.dumps(out, indent=1))
     print(f"wrote {DATA / 'floorplan.json'}")
 
-    # debug image: top-down colour + walkable outline + hazards
-    fig, ax = plt.subplots(figsize=(9, 9))
-    order = np.argsort(h)
-    m = inb[order] & (h[order] < 8)
-    o = order[m][:: max(1, m.sum() // 400_000)]
-    ax.scatter(p[o, 0], p[o, 1], c=rgb[o], s=0.3, linewidths=0)
-    ax.plot(*np.vstack([poly, poly[:1]]).T, color="cyan", lw=2, label="walkable")
-    for d in hazards:
-        ax.scatter(*d["position"], s=80, c="red" if d["kind"] == "overhang" else "orange", edgecolors="k", zorder=5)
-        ax.annotate(f"{d['height_m']:.2f} m", d["position"], color="w", fontsize=8, xytext=(4, 4), textcoords="offset points")
-    for z in zones:
-        ax.add_patch(plt.Circle(z["center"], z["radius_m"], fill=False, color="yellow", ls="--"))
-    ax.set_xlim(-HALF, HALF); ax.set_ylim(-HALF, HALF); ax.set_aspect("equal"); ax.set_facecolor("k")
-    ax.set_title(f"{row['address']}  (walkable cyan, hazards red/orange)")
-    fig.savefig(DATA / "floorplan_debug.png", dpi=110, bbox_inches="tight")
-    print(f"wrote {DATA / 'floorplan_debug.png'}")
+    # backdrop: top-down render, colour of the highest Gaussian per pixel (below 8 m), 5 cm/px, north-up = +Y up
+    from PIL import Image
+    px = 0.05
+    W = int(2 * HALF / px)
+    m = inb & (h < 8)
+    order = np.argsort(h[m])
+    q, c = p[m][order], rgb[m][order]
+    ix = np.clip(((q[:, 0] + HALF) / px).astype(int), 0, W - 1)
+    iy = np.clip(((HALF - q[:, 1]) / px).astype(int), 0, W - 1)
+    img = np.zeros((W, W, 3)); has = np.zeros((W, W), bool)
+    img[iy, ix] = c; has[iy, ix] = True                       # later (higher) points overwrite lower ones
+    for _ in range(3):                                        # fill small gaps from neighbours
+        grown = np.stack([ndimage.grey_dilation(img[..., k] * has, size=3) for k in range(3)], -1)
+        img = np.where(has[..., None], img, grown); has = ndimage.binary_dilation(has)
+    lo_, hi_ = np.percentile(img[has], [1, 99])
+    img = np.clip((img - lo_) / (hi_ - lo_), 0, 1) ** 0.8
+    Image.fromarray((img * 255).astype(np.uint8)).save(DATA / "splat_topdown.jpg", quality=85)
+    print(f"wrote {DATA / 'splat_topdown.jpg'} ({W}x{W}, {px * 100:.0f} cm/px)")
 
 
 if __name__ == "__main__":
