@@ -12,3 +12,4 @@ connect/data/memories/
 .claude/settings.local.json
 connect/data/family_links.json
 connect/tests/out/
+connect/data/memories_archive/

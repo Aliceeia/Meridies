@@ -36,7 +36,9 @@ with sync_playwright() as pw:
     page.wait_for_selector("#report", state="visible")
     time.sleep(1)
     print("report:", page.inner_text("#reportLine"))
-    print("path points:", page.evaluate("blind.path.length"), "| tones played:", page.evaluate("window.__tones"))
+    assert page.evaluate("blind.path === undefined"), "blindfold mode must not keep a path"
+    assert "metres" not in page.inner_text("#reportLine")
+    print("no path kept | tones played:", page.evaluate("window.__tones"))
     print("spoken:", [s[:70] for s in page.evaluate("window.__spoken")])
     print("voice:", page.evaluate("voice && voice.name"))
     page.screenshot(path=str(OUT / "blind_report.png"))

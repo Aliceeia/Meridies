@@ -119,7 +119,8 @@ memHooks.push(() => {
 });
 
 // ---------- blindfold mode ----------
-const blind = { on: false, t0: 0, path: [], reached: new Set(), heard: new Set(), timer: null };
+// No path is kept: only which memories were reached and heard. We never map where someone went.
+const blind = { on: false, t0: 0, reached: new Set(), heard: new Set(), timer: null };
 function setBlind(on) {
   if (on === blind.on) return;
   blind.on = on;
@@ -127,7 +128,7 @@ function setBlind(on) {
   $("blind").hidden = !on;
   document.activeElement && document.activeElement.blur();
   if (on) {
-    Object.assign(blind, { t0: performance.now(), path: [[state.walker.x, state.walker.y]], reached: new Set(), heard: new Set() });
+    Object.assign(blind, { t0: performance.now(), reached: new Set(), heard: new Set() });
     blind.timer = setInterval(() => { if (play.playingId) blind.heard.add(play.playingId); }, 250);
     earcon("dark");
     setTimeout(() => speak("Blindfold on. Arrows to walk. Enter to listen. W, where am I. R, record. Space to see again."), 500);
@@ -139,8 +140,6 @@ function setBlind(on) {
 }
 onWalkerChange(() => {
   if (!blind.on) return;
-  const [lx, ly] = blind.path[blind.path.length - 1], w = state.walker;
-  if (Math.hypot(w.x - lx, w.y - ly) > 0.15) blind.path.push([w.x, w.y]);
   for (const m of state.memories) if (relative(m).dist <= NEAR_M) blind.reached.add(m.id);
 });
 document.addEventListener("keydown", (e) => {
@@ -161,13 +160,11 @@ $("blindBtn").addEventListener("click", () => setBlind(true));
 
 function showReport() {
   const p = state.plan, secs = Math.round((performance.now() - blind.t0) / 1000);
-  let dist = 0;
-  for (let i = 1; i < blind.path.length; i++) dist += Math.hypot(blind.path[i][0] - blind.path[i - 1][0], blind.path[i][1] - blind.path[i - 1][1]);
   const total = state.memories.length, found = blind.reached.size, heard = blind.heard.size;
   const svg = $("reportMap");
   svg.replaceChildren();
   const pts = isInterior() ? p.rooms.flatMap((r) => r.polygon) : p.walkable;
-  const xs = pts.map((q) => q[0]).concat(blind.path.map((q) => q[0])), ys = pts.map((q) => q[1]).concat(blind.path.map((q) => q[1]));
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
   const x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, y0 = Math.min(...ys) - 1, y1 = Math.max(...ys) + 1;
   svg.setAttribute("viewBox", `${x0} ${-y1} ${x1 - x0} ${y1 - y0}`);
   const k = (x1 - x0) / 20;
@@ -184,12 +181,7 @@ function showReport() {
       opacity: got ? 0.95 : 0.6 }, svg);
     if (blind.heard.has(m.id)) svgEl("circle", { cx: m.position.x, cy: -m.position.y, r: 0.85 * k, fill: "none", stroke: "#fff", "stroke-width": 0.08 * k }, svg);
   }
-  svgEl("polyline", { points: blind.path.map(([x, y]) => `${x},${-y}`).join(" "), fill: "none", stroke: "#fff",
-    "stroke-width": 0.14 * k, "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": `${0.4 * k} ${0.25 * k}` }, svg);
-  const [sx, sy] = blind.path[0], [ex, ey] = blind.path[blind.path.length - 1];
-  svgEl("circle", { cx: sx, cy: -sy, r: 0.3 * k, fill: "#9fd8b4" }, svg);
-  svgEl("circle", { cx: ex, cy: -ey, r: 0.3 * k, fill: "#ff6b5e" }, svg);
-  const line = `${secs} seconds without sight. You walked ${dist.toFixed(1)} metres and found ${found} of ${total} ${total === 1 ? "memory" : "memories"} by sound${heard ? `, and listened to ${heard}` : ""}.`;
+  const line = `${secs} seconds without sight. You found ${found} of ${total} ${total === 1 ? "memory" : "memories"} by sound${heard ? `, and listened to ${heard}` : ""}.`;
   $("reportLine").textContent = line;
   $("report").hidden = false;
   setTimeout(() => speak(line), 600);
