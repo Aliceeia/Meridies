@@ -314,14 +314,26 @@ function renderMemories() {
 const memHooks = []; // later steps decorate each memory card
 
 // ---------- record ----------
-const REC_SECONDS = 10;
-const rec = { mr: null, stream: null, timer: null, anchor: null };
+// No fixed length: the person stops it (Stop button, R or Enter). Guards against a forgotten open mic:
+const REC_SOFT_S = 180;                 // 3 min: say once "Still recording. Press R to stop."
+const REC_HARD_S = 300;                 // 5 min: stop by itself and keep it PRIVATE
+const REC_MAX_BYTES = 4.5 * 2 ** 20;    // stop before the server's 5 MB upload cap
+const rec = { mr: null, stream: null, timer: null, anchor: null, bytes: 0, interrupted: false, autoStopped: false };
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+rec.stop = (why = "user") => {          // why: user | auto | interrupt
+  if (!rec.mr || rec.mr.state !== "recording") return false;
+  if (why === "interrupt") rec.interrupted = true;
+  if (why === "auto") rec.autoStopped = true;
+  rec.mr.stop();
+  return true;
+};
 
 $("rec").addEventListener("click", startRecording);
-$("recStop").addEventListener("click", () => rec.mr && rec.mr.state === "recording" && rec.mr.stop());
+$("recStop").addEventListener("click", () => rec.stop("user"));
 
 async function startRecording() {
   if (rec.mr) return;
+  if (state.hatWarning) { $("recState").textContent = "Obstacle warning — try again when it's clear."; return; }
   audio.ctx(); // first gesture creates the AudioContext
   const w = state.walker;
   // Anchor = where the walker stands at the moment of the press. z: approx. speaking height above ground (m).
@@ -338,24 +350,33 @@ async function startRecording() {
   const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
   const mr = (rec.mr = new MediaRecorder(rec.stream, mime ? { mimeType: mime } : {}));
   const chunks = [];
-  mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  rec.bytes = 0; rec.interrupted = false; rec.autoStopped = false;
+  mr.ondataavailable = (e) => {
+    if (!e.data.size) return;
+    chunks.push(e.data);
+    rec.bytes += e.data.size;
+    if (rec.bytes >= REC_MAX_BYTES) rec.stop("auto");          // never let an upload fail at the server cap
+  };
   mr.onstop = () => finishRecording(new Blob(chunks, { type: mr.mimeType || "audio/webm" }));
 
   // start cue: two rising tones, then record
   audio.tone(660, 0.12, 0.25); audio.tone(880, 0.12, 0.25, 0.15);
   setTimeout(() => {
     if (rec.mr !== mr) return;
-    mr.start();
+    mr.start(1000);                                             // 1 s chunks: lets us watch the size
     document.body.classList.add("recording");
     $("recStop").hidden = false;
+    $("recStop").focus();                                       // the big Stop now sits where Record was
     state.target = null;
     showRecMarker(true);
-    let left = REC_SECONDS;
-    const show = () => ($("recState").innerHTML = `<span class="pulse">●</span> REC ${left}s`);
+    document.dispatchEvent(new CustomEvent("recording-started"));
+    let t = 0;
+    const show = () => ($("recState").innerHTML = `<span class="pulse" aria-hidden="true">●</span> Recording ${mmss(t)}`);
     show();
     rec.timer = setInterval(() => {
-      left -= 1;
-      if (left <= 0) { if (mr.state === "recording") mr.stop(); return; }
+      t += 1;
+      if (t >= REC_HARD_S) { rec.stop("auto"); return; }
+      if (t === REC_SOFT_S && typeof speak === "function") speak("Still recording. Press R to stop.");
       audio.tone(1000, 0.04, 0.05); // quiet per-second blip: recording is in progress
       show();
     }, 1000);
@@ -368,24 +389,32 @@ async function finishRecording(blob) {
   document.body.classList.remove("recording");
   $("recStop").hidden = true;
   showRecMarker(false);
-  audio.tone(880, 0.12, 0.25); audio.tone(660, 0.12, 0.25, 0.15); // end cue: falling
+  const interrupted = rec.interrupted, autoStopped = rec.autoStopped;
+  // end cue: falling tones confirm it stopped. Never during an obstacle warning: the warning has priority.
+  if (!interrupted) { audio.tone(880, 0.12, 0.25); audio.tone(660, 0.12, 0.25, 0.15); }
   $("recState").textContent = "Saving…";
   const a = rec.anchor;
   rec.facingSaved = rec.facing;
   rec.mr = null; rec.stream = null; rec.anchor = null; rec.facing = null;
+  if (!blob.size) { $("recState").textContent = ""; document.dispatchEvent(new CustomEvent("recording-failed")); return; }
   try {
-    const q = new URLSearchParams({ ...a, ...rec.facingSaved, building_id: state.plan.building.id, author_id: state.user });
+    // Saved PRIVATE on the server the moment it lands; an interrupted take is a private DRAFT.
+    const q = new URLSearchParams({ ...a, ...rec.facingSaved, building_id: state.plan.building.id, author_id: state.user,
+                                    ...(interrupted ? { draft: "1" } : {}) });
     const r = await fetch(`/api/memories?${q}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
     const saved = await r.json();
     if (!r.ok) throw new Error(saved.error);
-    $("recState").textContent = "It's here now.";
+    $("recState").textContent = interrupted ? "Stopped for the warning. Kept as a private draft." : "It's here now.";
     await loadMemories();
-    document.dispatchEvent(new CustomEvent("memory-saved", { detail: saved }));
+    const detail = { ...saved, interrupted, autoStopped };
+    document.dispatchEvent(new CustomEvent("memory-saved", { detail }));
+    document.dispatchEvent(new CustomEvent("recording-finished", { detail }));
   } catch (e) {
     $("recState").textContent = "";
     toast(`Save failed: ${e.message}`, 4000);
+    document.dispatchEvent(new CustomEvent("recording-failed"));
   }
-  setTimeout(() => ($("recState").textContent = ""), 2500);
+  setTimeout(() => ($("recState").textContent = ""), 4000);
 }
 
 function showRecMarker(on) {
@@ -434,8 +463,11 @@ function whenHuman(iso) {
   return `on ${d.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
 }
 function whoHuman(m) {
-  if (m.author_id === state.user) return m.visibility === "community" ? "you left this here, and shared it" : "you left this here";
-  return "someone left this here for everyone";
+  if (m.author_id !== state.user) return "someone left this here for everyone";
+  // status in words, never only by colour
+  if (m.draft) return "Draft · you left this here, not decided yet · private";
+  if (m.share_request && m.share_request.status === "pending_review") return "you left this here · waiting for review · still private";
+  return m.visibility === "community" ? "you left this here, and shared it" : "you left this here · private";
 }
 function makePanner() {
   const c = audio.ctx(), p = c.createPanner();
@@ -613,18 +645,28 @@ memHooks.push(() => {
   for (const m of state.memories) {
     if (m.author_id !== state.user) continue;   // only the author can change who hears it
     const actions = document.querySelector(`#mem-${m.id} .actions`);
-    const b = document.createElement("button");
-    const next = m.visibility === "private" ? "community" : "private";
-    b.textContent = next === "community" ? "Share with community" : "Make private";
-    b.onclick = async () => {
-      b.disabled = true;
-      const r = await fetch(`/api/memories/${m.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ viewer: state.user, visibility: next }) });
-      if (!r.ok) { b.disabled = false; return toast((await r.json()).error); }
-      Object.assign(m, await r.json());
-      renderMemories();
+    const publicSpace = state.plan.building.public === true;   // community sharing only in public spaces
+    const shared = m.visibility === "community" || (m.share_request && m.share_request.status === "pending_review");
+    const add = (label, aria, body) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.setAttribute("aria-label", aria);
+      b.onclick = async () => {
+        b.disabled = true;
+        const r = await fetch(`/api/memories/${m.id}/decision`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ viewer: state.user, ...body }) });
+        if (!r.ok) { b.disabled = false; return toast((await r.json()).error); }
+        Object.assign(m, await r.json());
+        renderMemories();
+      };
+      actions.prepend(b);
     };
-    actions.prepend(b);
+    if (shared) add("Make private", "Make private. Only you will hear it.", { choice: "private", reason: "toggle" });
+    else {
+      if (publicSpace) add("Share with community", "Share with the community. Checked first, private until approved.",
+                           { choice: "share", reason: m.draft ? "draft-decided" : "toggle" });
+      if (m.draft) add("Keep private", "Keep private and stop asking.", { choice: "private", reason: "draft-decided" });
+    }
   }
 });
 

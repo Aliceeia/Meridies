@@ -47,6 +47,7 @@ with sync_playwright() as pw:
         page.wait_for_selector("body.recording", timeout=5000)
         time.sleep(3)
         page.screenshot(path=str(OUT / "step2_recording.png"))
+        page.click("#recStop")            # recordings have no fixed length any more: the person stops them
         # clicks on the map are refused while recording
         pos = page.evaluate("[state.walker.x, state.walker.y]")
         page.wait_for_function(f"() => state.memories.length === {n0 + 1}", timeout=20_000)
@@ -116,21 +117,15 @@ with sync_playwright() as pw:
         assert m["id"] not in seen_b
         assert page.request.get(f"{api}/{m['id']}/audio?viewer=user-b").status == 403
         assert page.request.patch(f"{api}/{m['id']}", data={"viewer": "user-b", "visibility": "community"}).status == 403
-        # author shares it
+        # The yard belongs to a private home: community sharing is not offered, and the server refuses it.
+        # (Sharing in public spaces -> pending_review is covered by connect/tests/test_sharing_server.py.)
         page.select_option("#user", "user-a"); page.wait_for_timeout(500)
-        page.click(f"#mem-{m['id']} >> text=Share with community")
-        page.wait_for_function(f"() => state.memories.find(x => x.id === '{m['id']}').visibility === 'community'")
+        offered = page.query_selector(f"#mem-{m['id']} >> text=Share with community") is not None
+        refused = page.request.patch(f"{api}/{m['id']}", data={"viewer": "user-a", "visibility": "community"}).status
+        print("private home: share button offered:", offered, "| server answer to a share request:", refused)
+        assert not offered and refused == 403
         page.select_option("#user", "user-b"); page.wait_for_timeout(500)
-        print("after sharing, user-b sees it:", m["id"] in page.evaluate("state.memories.map(x => x.id)"))
-        page.click("h2")
-        walk_to(page, 17.3, 5.7)
-        walk_to(page, m["position"]["x"] + 2.0, m["position"]["y"])
-        assert page.evaluate("play.near") == m["id"], "user-b did not get the chime/prompt"
-        assert page.evaluate("play.playingId") is None
-        page.click("#listen")
-        page.wait_for_function("() => play.playingId !== null", timeout=10_000)
-        print("user-b hears it after confirming:", page.inner_text("#nearWhere"))
-        assert page.query_selector(f"#mem-{m['id']} >> text=Make private") is None, "non-author got a visibility toggle"
+        assert m["id"] not in page.evaluate("state.memories.map(x => x.id)")
         page.screenshot(path=str(OUT / "step5_userb.png"))
 
     if STEP == "6":   # interior: sweep-to-sweep walking + first-person view + memory at a sweep

@@ -174,12 +174,7 @@ document.addEventListener("memory-saved", (e) => {
   placeMarkers();
   const dot = $("markers").querySelector(`[data-id="${m.id}"]`);
   if (dot) { dot.classList.remove("landed"); void dot.offsetWidth; dot.classList.add("landed"); }
-  else toast("Your memory is here now");
-  // play the first moments back from where it now lives, then let it rest
-  setTimeout(async () => {
-    await playVoice(m);
-    setTimeout(() => { if (play.playingId === m.id) stopVoice(); }, 3000);
-  }, 700);
+  // The full playback now belongs to the after-recording flow (after_record_ui.js): reviewing -> deciding.
 });
 
 // ---------- building switch: the real place for the interior, the map for the yard ----------

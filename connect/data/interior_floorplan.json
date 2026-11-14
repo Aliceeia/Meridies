@@ -4,7 +4,9 @@
   "id": "zvKHR9DHNjJ",
   "name": "5836 La Mirada Ave",
   "lat": 34.093491666999995,
-  "lon": -118.3171
+  "lon": -118.3171,
+  "public": false,
+  "space_kind": "private_residence"
  },
  "start_sweep": 4,
  "sweeps": [

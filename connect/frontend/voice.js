@@ -59,7 +59,9 @@ onWalkerChange(() => {
   if (lastSweep !== null && state.walker.sweep !== lastSweep) earcon("step");
   lastSweep = state.walker.sweep;
 });
-document.addEventListener("memory-saved", () => earcon("saved"));
+document.addEventListener("memory-saved", (e) => {
+  if (!e.detail.interrupted && !state.hatWarning) earcon("saved");   // an obstacle warning outranks every memory sound
+});
 
 // ---------- speak, don't show ----------
 // While Gemini thinks, say so once and keep a soft heartbeat going, so silence never means "broken".
@@ -149,10 +151,11 @@ document.addEventListener("keydown", (e) => {
   }
   if (!blind.on) return;
   if (e.key === "Enter") {
+    if (rec.mr || window.afterRecordBusy) return;      // Enter belongs to the recording flow right now
     e.preventDefault();
     if (play.near) playVoice(memById(play.near)); else { earcon("nothing"); speak("Nothing to listen to here."); }
   } else if (e.key === "w" || e.key === "W") $("whereami").click();
-  else if (e.key === "r" || e.key === "R") $("rec").click();
+  else if ((e.key === "r" || e.key === "R") && !rec.mr) $("rec").click();   // while recording, R stops (after_record_ui)
 }, true);
 $("blindBtn").addEventListener("click", () => setBlind(true));
 

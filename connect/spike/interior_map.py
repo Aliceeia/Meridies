@@ -166,6 +166,7 @@ def main():
                       convention="east,north = R_ccw(rotation_deg) @ [x,y]; compass heading = map heading - rotation_deg")
     out = dict(
         building=dict(model_id=MODEL, id=MODEL, name=cap.get("title", MODEL),
+                      public=False, space_kind="private_residence",   # community sharing only in public spaces
                       lat=geo and geo["latitude"], lon=geo and geo["longitude"]),
         start_sweep=start_sweep,
         sweeps=sweeps, walkable=walkable, hazards=[], rooms=rooms, openings=openings,

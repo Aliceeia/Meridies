@@ -4,7 +4,9 @@
   "name": "4606 Kinglet St",
   "address": "4606 Kinglet St, Houston, TX, 77035, US",
   "lat": 29.6603594,
-  "lon": -95.4546392
+  "lon": -95.4546392,
+  "public": false,
+  "space_kind": "private_residence"
  },
  "walkable": [
   [

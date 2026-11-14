@@ -243,6 +243,7 @@ def main():
 
     out = dict(
         building=dict(id=SID, name=str(row["name"]), address=str(row["address"]),
+                      public=False, space_kind="private_residence",   # community sharing only in public spaces
                       lat=float(row["lat"]), lon=float(row["lon"])),
         walkable=[[round(float(x), 2), round(float(y), 2)] for x, y in poly],
         zones=zones,

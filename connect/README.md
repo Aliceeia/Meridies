@@ -1,6 +1,6 @@
 # connect/ — the memory layer
 
-Arrive at a place → record 10 s → anchored to coordinates → come back later → hear it
+Arrive at a place → record (until you stop) → hear it back → keep it private (default) → come back later → hear it
 from that direction → optionally an AI description of the place from aerial + drone imagery.
 
 The only link to the hardware half: while the hat is warning, memory audio stays silent
@@ -56,7 +56,13 @@ Map frame: metres, origin at the house, +Z up, floor z=0. Map +Y points (almost)
 
 ## Rules the code enforces
 
-- Nothing is recorded without a press; the mic closes after 10 s.
+- Nothing is recorded without a press. The person stops it (Stop, R or Enter); a reminder is spoken at 3 min and
+  it stops by itself at 5 min (kept private), or just before the 5 MB upload cap.
+- After recording: playback -> one spoken question -> saved (`frontend/after_record.js`, a pure state machine).
+  Private is the default for silence, timeout, Escape, leaving, and any interruption (`window.meridies.interrupt()`).
+- Community sharing exists only where `building.public === true` (missing = not public) and only creates a
+  `pending_review` request; `backend/moderation.py` is a stub that never approves. Tests: `node --test
+  connect/tests/after_record.test.js`, `pytest connect/tests/test_sharing_server.py`.
 - New memories are private. Only the author can change visibility. Others see only `community` ones,
   and private audio/images answer 403 to anyone else.
 - Voices never auto-play: a chime (HRTF, from the anchor's direction) offers, a press plays.

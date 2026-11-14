@@ -29,7 +29,7 @@ FRONT = HERE / "frontend"
 DATA = HERE / "data"
 MEM = DATA / "memories"
 PORT = 8765
-MAX_AUDIO = 5 * 2**20            # 10 s of opus is ~100-200 KB; refuse anything silly
+MAX_AUDIO = 5 * 2**20            # backstop; opus is ~15-30 KB/s, the page stops at 4.5 MB or 5 min first
 AUDIO_EXT = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav"}
 ID_RE = re.compile(r"^[0-9a-f]{32}$")
 PUBLIC_DATA = {"floorplan.json", "splat_topdown.jpg"}
@@ -73,8 +73,45 @@ def can_see(meta, viewer):
 COMPASS_RE = re.compile(r"\b(north|south|east|west)(ern|ward|-?east|-?west)?\b", re.I)
 
 
-def public(meta):
-    out = {k: v for k, v in meta.items() if k != "audio_file"}
+def is_public_space(bid: str) -> bool:
+    """Community sharing exists only in public spaces (museums, campuses, parks).
+    The flag lives in the building record; a missing flag means NOT public."""
+    try:
+        return desc.load_plan(bid)["building"].get("public") is True
+    except (KeyError, OSError, ValueError):
+        return False
+
+
+def apply_choice(m: dict, choice: str, reason: str) -> tuple[int, str | None]:
+    """The only place that changes who may hear a memory. Private unless explicitly shared AND reviewed.
+    Returns (http status, error)."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if choice == "private":
+        m.update(visibility="private", draft=False)
+        if m.get("share_request"):
+            m["share_request"]["status"] = "withdrawn"
+    elif choice == "later":
+        m.update(visibility="private", draft=True)
+    elif choice == "share":
+        if not is_public_space(m["building_id"]):
+            return 403, "community sharing is only available in public spaces"
+        from connect.backend import moderation
+        review = moderation.review_share_request(MEM / m["audio_file"], m)
+        # visibility stays private until a reviewer approves; the stub never approves
+        m.update(draft=False, share_request={"status": review["status"], "requested_at": now, "review": review})
+        if review["status"] == "approved":
+            m["visibility"] = "community"
+    else:
+        return 400, "choice must be private, share or later"
+    m.setdefault("decisions", []).append({"choice": choice, "reason": reason, "at": now})
+    return 200, None
+
+
+def public(meta, viewer=None):
+    out = {k: v for k, v in meta.items() if k not in ("audio_file", "decisions")}
+    if out.get("share_request") and viewer != meta.get("author_id"):
+        out["share_request"] = {"status": out["share_request"]["status"]}   # review details are the author's business
+    out["reports"] = len(meta.get("reports") or []) if viewer != meta.get("author_id") else meta.get("reports") or []
     d = out.get("description")
     if d and COMPASS_RE.search(d.get("text", "")):
         out["description"] = None   # written before descriptions became body-relative: ask again rather than say "south"
@@ -147,7 +184,8 @@ class Handler(BaseHTTPRequestHandler):
             out = []
             for bid in desc.BUILDINGS:
                 fp = desc.load_plan(bid)
-                out.append(dict(id=bid, name=fp["building"]["name"], kind=fp["kind"], default=bid == DEFAULT_BUILDING))
+                out.append(dict(id=bid, name=fp["building"]["name"], kind=fp["kind"], default=bid == DEFAULT_BUILDING,
+                                public=fp["building"].get("public") is True))
             return self.send(200, out)
         if parts == ["api", "memories"]:
             viewer, bid = q.get("viewer", ""), q.get("building_id")
@@ -155,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
             for f in sorted(MEM.glob("*.json")) if MEM.exists() else []:
                 m = json.loads(f.read_text())
                 if can_see(m, viewer) and (bid is None or m["building_id"] == bid):
-                    out.append(public(m))
+                    out.append(public(m, viewer))
             return self.send(200, out)
         if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "audio" and ID_RE.match(parts[2]):
             try:
@@ -198,9 +236,12 @@ class Handler(BaseHTTPRequestHandler):
             MEM.mkdir(parents=True, exist_ok=True)
             fname = f"{mid}.{AUDIO_EXT[ctype]}"
             (MEM / fname).write_bytes(audio)
+            # Private by default, always. draft=1 comes from an interrupted recording.
             meta = dict(id=mid, position=pos, building_id=bid, author_id=author,
                         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                        visibility="private", description=None, audio_type=ctype, audio_file=fname)
+                        visibility="private", draft=q.get("draft") in ("1", "true"), share_request=None,
+                        reports=[],   # reserved for listener reports (not implemented yet)
+                        description=None, audio_type=ctype, audio_file=fname)
             try:  # optional: where the person faced, and which sweep they stood at (interior)
                 if "heading_deg" in q:
                     meta["heading_deg"] = round(float(q["heading_deg"]) % 360, 1)
@@ -209,7 +250,19 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self.err(400, f"bad request: {e}")
             save(meta)
-            return self.send(201, public(meta))
+            return self.send(201, public(meta, author))
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "decision" and ID_RE.match(parts[2]):
+            try:
+                m, req = load(parts[2]), json.loads(self.body() or b"{}")
+            except (FileNotFoundError, ValueError):
+                return self.err(404, "no such memory")
+            if req.get("viewer") != m["author_id"]:
+                return self.err(403, "only the author decides who hears a memory")
+            code, error = apply_choice(m, req.get("choice"), str(req.get("reason", "chosen"))[:40])
+            if error:
+                return self.err(code, error)
+            save(m)
+            return self.send(200, public(m, m["author_id"]))
         if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "describe" and ID_RE.match(parts[2]):
             try:
                 m, req = load(parts[2]), json.loads(self.body() or b"{}")
@@ -230,7 +283,7 @@ class Handler(BaseHTTPRequestHandler):
             except (urllib.error.URLError, KeyError, IndexError, TimeoutError) as e:
                 return self.err(502, f"Couldn't describe this place: {e!r}"[:200])
             save(m)
-            return self.send(200, public(m))
+            return self.send(200, public(m, req.get("viewer")))
         return self.err(404, "not found")
 
     def do_PATCH(self):
@@ -244,9 +297,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.err(403, "only the author can change visibility")
             if req.get("visibility") not in ("private", "community"):
                 return self.err(400, "visibility must be private or community")
-            m["visibility"] = req["visibility"]
+            # "community" is only ever a REQUEST (pending_review); "private" always works, at any time.
+            code, error = apply_choice(m, "share" if req["visibility"] == "community" else "private", "toggle")
+            if error:
+                return self.err(code, error)
             save(m)
-            return self.send(200, public(m))
+            return self.send(200, public(m, m["author_id"]))
         return self.err(404, "not found")
 
 
