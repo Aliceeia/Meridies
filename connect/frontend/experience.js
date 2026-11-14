@@ -7,7 +7,7 @@
 // iframe (ss = sweep+1, sr = pitch,yaw with yaw = -heading). If the user looks around inside the
 // iframe on their own, we notice the focus change, dim the memory lights and offer a re-sync.
 
-const SHOW = "https://my.matterport.com/show/?play=1&qs=1&help=0&hl=0&brand=0&title=0&dh=0&gt=0&hr=0&mt=0&f=0&fp=0&vr=0&search=0&pin=0&portal=0&tourcta=0&wh=0";
+const SHOW = "https://my.matterport.com/show/?play=1&qs=1&help=0&hl=0&brand=0&title=0&dh=0&gt=0&hr=0&mt=0&f=0&fp=0&vr=0&search=0&pin=0&portal=0&tourcta=0&wh=0&lang=en";
 const VFOV_DEG = 73;          // showcase camera, vertical (approx.; 1280x800 renders span ~100 deg horizontally)
 const MAX_LIST = 1;           // only the nearest memory expands; the rest collapse to one line
 const scenes = [$("sc0"), $("sc1")];
@@ -121,7 +121,6 @@ function tidyList() {
 }
 
 // ---------- where am I (local data only: instant, no API calls) ----------
-const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
 function whereAmI() {
   const p = state.plan, w = state.walker;
   let place;
@@ -132,8 +131,25 @@ function whereAmI() {
     const z = currentZone();
     place = z ? `in the ${z.name.split(",")[0].toLowerCase()}, ${z.name.split(",")[1] || ""}`.trim() : "in the yard";
   }
-  const facing = p.georef ? `, facing ${COMPASS[Math.round(norm360(w.heading - p.georef.rotation_deg) / 45) % 8]}` : "";
-  const parts = [`You're ${place}${facing}.`];
+  // Body-relative only: what is ahead / left / right / behind, never compass points.
+  const parts = [`You're ${place}.`];
+  if (isInterior()) {
+    const here = (sweepAt(w.sweep) || {}).room;
+    const roomAt = (x, y) => (p.rooms.find((r) => insidePoly(x, y, r.polygon)) || {}).label;
+    const doors = (p.openings || []).filter((o) => o.type === "doorway")
+      .map((o) => {
+        let to = null;   // the room on the far side of the doorway
+        for (let k = 0; k < 8 && !to; k++) {
+          const a = (k * Math.PI) / 4, lbl = roomAt(o.center[0] + 0.6 * Math.cos(a), o.center[1] + 0.6 * Math.sin(a));
+          if (lbl && lbl !== here) to = lbl;
+        }
+        return { to, r: relative({ position: { x: o.center[0], y: o.center[1] } }) };
+      })
+      .filter((d) => d.r.dist <= 4).sort((a, b) => a.r.dist - b.r.dist).slice(0, 2);
+    for (const d of doors) {
+      parts.push(`There's a doorway${d.to ? ` to the ${d.to.toLowerCase()}` : ""} ${describeDir(d.r)}.`);
+    }
+  }
   const hz = (p.hazards || [])
     .map((h) => ({ h, r: relative({ position: { x: h.position[0], y: h.position[1] } }) }))
     .filter(({ r }) => r.dist <= 3.5).sort((a, b) => a.r.dist - b.r.dist)[0];

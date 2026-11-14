@@ -50,7 +50,7 @@ FALLBACKS = ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini
 last_model = None  # the model that produced the most recent answer
 
 
-def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: int = 120, fallback: bool = True) -> str:
+def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: int = 60, fallback: bool = True) -> str:
     """parts: list of {"text": ...} or image_part(...). Returns the text answer.
     On quota (429) or overload (503) it retries, then moves to the next model in FALLBACKS."""
     global last_model
@@ -78,6 +78,9 @@ def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: 
                 if e.code in (429, 503, 404):
                     break          # quota, overload, or model not offered to this key: next model
                 raise
+            except (TimeoutError, urllib.error.URLError) as e:
+                err = e
+                break              # this model hung: try the next one rather than failing the user
     raise err
 
 

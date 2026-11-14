@@ -29,7 +29,7 @@ try:
     print("images sent:", [i["label"] for i in d["images"]])
 except urllib.error.HTTPError as e:
     print("describe ->", e.code, json.loads(e.read())["error"][:300])
-for kind in ("firstperson", "aerial", "topdown"):
+for kind in ("firstperson", "aerial2", "topdown2"):
     try:
         b = urllib.request.urlopen(f"{URL}/api/memories/{m['id']}/image/{kind}?viewer=user-a").read()
         (OUT / f"p4_{kind}.jpg").write_bytes(b)

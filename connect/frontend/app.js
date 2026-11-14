@@ -430,8 +430,8 @@ function whenHuman(iso) {
   const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / day);
   if (days <= 0) return "earlier today";
   if (days === 1) return "yesterday";
-  if (days < 7) return `on ${d.toLocaleDateString([], { weekday: "long" })}`;
-  return `on ${d.toLocaleDateString([], { month: "long", day: "numeric" })}`;
+  if (days < 7) return `on ${d.toLocaleDateString("en-US", { weekday: "long" })}`;   // always English, whatever the OS language
+  return `on ${d.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
 }
 function whoHuman(m) {
   if (m.author_id === state.user) return m.visibility === "community" ? "you left this here, and shared it" : "you left this here";

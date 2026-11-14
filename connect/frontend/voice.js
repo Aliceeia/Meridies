@@ -21,6 +21,7 @@ speak = function (text, { interrupt = true } = {}) {      // eslint-disable-line
   if (state.hatWarning) return earcon("muted");
   if (interrupt) speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";                     // never let a Chinese system voice read English text
   if (voice || pickVoice()) u.voice = voice;
   u.rate = 0.92; u.pitch = 1.08; u.volume = 0.9;
   speechSynthesis.speak(u);

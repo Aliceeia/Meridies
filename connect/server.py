@@ -160,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.err(403, "private memory")
             return self.file(MEM / m["audio_file"], m["audio_type"])
         if (len(parts) == 5 and parts[:2] == ["api", "memories"] and parts[3] == "image"
-                and parts[4] in ("aerial", "splat", "firstperson", "topdown") and ID_RE.match(parts[2])):
+                and parts[4] in ("aerial", "splat", "firstperson", "topdown", "aerial2", "topdown2") and ID_RE.match(parts[2])):
             try:
                 m = load(parts[2])
             except FileNotFoundError:
