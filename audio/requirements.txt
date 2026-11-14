@@ -1,0 +1,5 @@
+slab
+numpy
+soundfile
+sounddevice
+pyzmq
