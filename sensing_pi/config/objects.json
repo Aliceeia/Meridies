@@ -1,0 +1,45 @@
+{
+  "_comment": "Object-pipeline tuning. A rig json can override any key under its own \"objects\": {...}. Distances in metres, angles in degrees, times in seconds.",
+
+  "band_z_m": [-1.2, 0.4],
+  "max_range_m": 4.0,
+  "bin_deg": 3.0,
+
+  "map_window_s": 0.3,
+  "map_window_imu_s": 1.5,
+
+  "same_abs_m": 0.25,
+  "same_rel": 0.2,
+  "max_gap_deg": 20.0,
+
+  "narrow_width_m": 0.35,
+  "narrow_min_bins": 2,
+
+  "wall_min_bins": 5,
+  "wall_min_width_m": 0.6,
+  "wall_max_resid_m": 0.10,
+  "wall_parallel_deg": 30.0,
+  "wall_facing_deg": 60.0,
+
+  "track_gate_az_deg": 15.0,
+  "track_gate_dist_m": 0.4,
+  "track_ema": 0.5,
+  "track_drop_s": 0.3,
+  "ttc_window_s": 0.3,
+  "ttc_min_samples": 3,
+  "min_closing_mps": 0.1,
+
+  "warn_dist_m": 1.5,
+  "clear_dist_m": 1.7,
+  "urgent_dist_m": 0.5,
+  "warn_ttc_s": 2.0,
+  "clear_ttc_s": 2.5,
+  "urgent_ttc_s": 0.8,
+  "parallel_wall_dist_m": 0.5,
+
+  "kind_weight": {"narrow": 1.0, "wide": 0.8, "wall_facing": 0.8, "wall_oblique": 0.6, "wall_parallel": 0.2},
+  "max_warnings": 3,
+
+  "audio_endpoint": "tcp://*:5556",
+  "debug_port": 5558
+}

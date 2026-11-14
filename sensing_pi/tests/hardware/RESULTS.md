@@ -1,6 +1,6 @@
 # VL53L5CX single-board bench results
 
-Board: Pimoroni VL53L5CX breakout · Label: **S1** · Tester: ____ · Date: ____
+Board: AITRIP VL53L5CX V2 module · Label: **S1** · Tester: ____ · Date: ____
 Pi I2C baudrate: 1 MHz / 400 kHz (circle one)
 
 Run from `sensing_pi/`: `.venv/bin/python tests/hardware/vl53l5cx_single.py [options]`

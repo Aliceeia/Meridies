@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Bench test for a single VL53L5CX (Pimoroni breakout) on the Pi's I2C bus 1.
+"""Bench test for a single VL53L5CX (AITRIP V2 module) on the Pi's I2C bus 1.
+
+Wiring: VIN->3.3V (pin 1), GND->pin 6, SDA->pin 3, SCL->pin 5, LPn->GPIO17 (pin 11), INT unconnected.
+LPn is driven high by this script (the module may have no LPn pull-up; floating LPn = I2C off).
 
 Examples (run from sensing_pi/):
   .venv/bin/python tests/hardware/vl53l5cx_single.py                 # live 8x8 grid
@@ -22,6 +25,7 @@ def parse_args():
     p.add_argument("--res", type=int, choices=(4, 8), default=8, help="grid size (default 8)")
     p.add_argument("--hz", type=int, help="ranging rate; max 15 at 8x8, 60 at 4x4 (default 15 / 20)")
     p.add_argument("--addr", type=lambda s: int(s, 0), default=vl53.DEFAULT_I2C_ADDRESS, help="I2C address (default 0x29)")
+    p.add_argument("--lpn", type=int, default=17, help="BCM GPIO wired to LPn, driven high (default 17; -1 = don't touch)")
     p.add_argument("--frames", type=int, default=0, help="stop after N frames (0 = run until Ctrl-C)")
     p.add_argument("--csv", help="log every frame (t, d0..dN, s0..sN) to this file")
     p.add_argument("--no-grid", action="store_true", help="print one summary line per frame instead of the grid")
@@ -54,6 +58,13 @@ def main():
     a = parse_args()
     zones = a.res * a.res
     hz = a.hz or (15 if a.res == 8 else 20)
+
+    if a.lpn >= 0:
+        import lgpio
+        gpio = lgpio.gpiochip_open(0)
+        lgpio.gpio_claim_output(gpio, a.lpn, 1)  # LPn high = I2C enabled; held until the script exits
+        time.sleep(0.02)
+        print(f"LPn (GPIO{a.lpn}) driven high", flush=True)
 
     print(f"Connecting to VL53L5CX at 0x{a.addr:02x} and uploading firmware...", flush=True)
     t0 = time.monotonic()

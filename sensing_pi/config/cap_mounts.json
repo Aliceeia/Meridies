@@ -1,0 +1,17 @@
+{
+  "_comment": "Head frame: origin = head centre (between ear canals), x forward, y right, z up, metres. az + right, el + up, degrees. x/y/z are placeholders until measured on the cap.",
+  "fov_deg": 45.0,
+  "range_model": "radial",
+  "min_range_m": 0.12,
+  "floor_z_m": -1.55,
+  "zone_flip_h": false,
+  "zone_flip_v": true,
+  "sensors": [
+    {"id": "S1", "az_deg": -40, "el_deg": -10, "roll_deg": 0, "x_m": 0.15, "y_m": -0.08, "z_m": 0.07, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S2", "az_deg":   0, "el_deg": -10, "roll_deg": 0, "x_m": 0.17, "y_m":  0.00, "z_m": 0.07, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S3", "az_deg":  40, "el_deg": -10, "roll_deg": 0, "x_m": 0.15, "y_m":  0.08, "z_m": 0.07, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S4", "az_deg": -85, "el_deg":  -5, "roll_deg": 0, "x_m": 0.00, "y_m": -0.09, "z_m": 0.08, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S5", "az_deg":   0, "el_deg": -40, "roll_deg": 0, "x_m": 0.14, "y_m":  0.00, "z_m": 0.06, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S6", "az_deg":  85, "el_deg":  -5, "roll_deg": 0, "x_m": 0.00, "y_m":  0.09, "z_m": 0.08, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0}
+  ]
+}
