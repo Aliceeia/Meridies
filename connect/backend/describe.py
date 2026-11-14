@@ -22,6 +22,7 @@ VEXCEL = "https://api.vexcelgroup.com/v2"
 M_PER_DEG = 111_320.0
 BUILDINGS = {  # id -> (plan file, kind)
     "zvKHR9DHNjJ": ("interior_floorplan.json", "interior"),
+    "2K7G7cdukZV": ("interior_2K7G7cdukZV.json", "interior"),   # Rabinowitz Hall foyer, Princeton (public)
     "1PVeAYmPNJz": ("floorplan.json", "yard"),
 }
 AERIAL_HALF, SPLAT_HALF, PLAN_HALF = 15.0, 12.0, 8.0

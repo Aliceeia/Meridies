@@ -1,9 +1,15 @@
-"""Memory layer server: static frontend + walk map + memory store.
+"""Memory layer server: gallery, realtime page, 3D walk, memory store.
 
     python connect/server.py            # http://localhost:8765
 
 Stdlib only. Memories live on disk in connect/data/memories/ (git-ignored):
-<id>.json (metadata) next to <id>.<ext> (audio).
+<id>.json (metadata) next to <id>.<ext> (audio), <id>_camera.jpg (hat frame, if sent), <id>_cover.jpg.
+
+Visibility: private (default) | family | community. Only the author changes it.
+  author  (?viewer=<author_id>)   sees all of their own memories
+  family  (?family=<link token>)  sees ONLY the link owner's family memories; read-only
+  anyone                          community memories (data model only: no browsing UI yet)
+Places are computed from the memories a viewer may see, per request; nothing about movement is stored.
 
 Identity is a demo switch (author_id sent by the client), not authentication.
 """
@@ -16,6 +22,8 @@ import math
 import mimetypes
 import os
 import re
+import secrets
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -33,6 +41,11 @@ MAX_AUDIO = 5 * 2**20            # backstop; opus is ~15-30 KB/s, the page stops
 AUDIO_EXT = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav"}
 ID_RE = re.compile(r"^[0-9a-f]{32}$")
 PUBLIC_DATA = {"floorplan.json", "splat_topdown.jpg"}
+VISIBILITY = ("private", "family", "community")
+LINKS = DATA / "family_links.json"          # token -> author_id; git-ignored
+MAX_FRAME = 3 * 2**20
+AUTO_PROCESS = os.environ.get("MERIDIES_AUTO_PROCESS", "1") == "1"    # transcribe + cover (+ describe) after save
+AUTO_DESCRIBE = os.environ.get("MERIDIES_AUTO_DESCRIBE", "1") == "1"
 
 
 # ---------- AI description: see connect/backend/describe.py ----------
@@ -57,17 +70,138 @@ def view_png(bid: str, sweep: int, heading_deg: float) -> bytes:
         return jpg.read_bytes()
 
 
+MEM_LOCK = threading.RLock()   # every read-modify-write of a memory record goes through update()
+
+
 def load(mid):
     return json.loads((MEM / f"{mid}.json").read_text())
 
 
 def save(meta):
     MEM.mkdir(parents=True, exist_ok=True)
-    (MEM / f"{meta['id']}.json").write_text(json.dumps(meta, indent=1))
+    tmp = MEM / f"{meta['id']}.json.tmp"
+    tmp.write_text(json.dumps(meta, indent=1))
+    tmp.replace(MEM / f"{meta['id']}.json")
 
 
-def can_see(meta, viewer):
-    return meta["author_id"] == viewer or meta["visibility"] == "community"
+def update(mid, fn):
+    """Load the freshest record, apply fn(m) (which may return (code, error)), save. Returns (m, code, error)."""
+    with MEM_LOCK:
+        m = load(mid)
+        r = fn(m)
+        if r and r[1]:
+            return m, r[0], r[1]
+        save(m)
+        return m, 200, None
+
+
+def all_memories():
+    files = sorted(f for f in MEM.glob("*.json") if ID_RE.match(f.stem)) if MEM.exists() else []
+    return [json.loads(f.read_text()) for f in files]
+
+
+# ---------- family links: a read-only key to one author's family memories ----------
+def _links() -> dict:
+    try:
+        return json.loads(LINKS.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def family_owner(token: str | None) -> str | None:
+    return _links().get(token) if token else None
+
+
+def family_link_for(author: str, create=True) -> str | None:
+    with MEM_LOCK:
+        links = _links()
+        tok = next((t for t, a in links.items() if a == author), None)
+        if tok or not create:
+            return tok
+        tok = secrets.token_urlsafe(12)
+        links[tok] = author
+        LINKS.write_text(json.dumps(links, indent=1))
+        return tok
+
+
+def revoke_family_link(author: str):
+    with MEM_LOCK:
+        LINKS.write_text(json.dumps({t: a for t, a in _links().items() if a != author}, indent=1))
+
+
+def who(q: dict) -> tuple[str, str | None]:
+    """(viewer, family_owner). A family link is read-only: it never carries an author identity."""
+    if q.get("family"):
+        return "", family_owner(q["family"]) or "\0no-such-link"
+    return q.get("viewer", ""), None
+
+
+def can_see(meta, viewer, fam_owner=None):
+    if viewer and meta["author_id"] == viewer:
+        return True
+    if meta["visibility"] == "community":
+        return True
+    return meta["visibility"] == "family" and fam_owner is not None and fam_owner == meta["author_id"]
+
+
+# ---------- after save: transcript, cover image, description (one at a time, never blocks the upload) ----------
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="process")
+
+
+def cover_file(m) -> Path | None:
+    """The hat camera frame if one was sent, else the first-person scan render at that spot and heading
+    (interior), else the top-down drone scan around the spot (the yard has no first-person renders)."""
+    cam = MEM / f"{m['id']}_camera.jpg"
+    if cam.exists():
+        return cam
+    out = MEM / f"{m['id']}_cover.jpg"
+    if out.exists():
+        return out
+    bid = m["building_id"]
+    if bid not in desc.BUILDINGS:
+        return None
+    plan = desc.load_plan(bid)
+    x, y = m["position"]["x"], m["position"]["y"]
+    if plan["kind"] == "interior":
+        sweep = m.get("sweep")
+        if sweep is None:
+            sweep = desc.nearest_sweep(plan, x, y)
+        data = view_png(bid, sweep, float(m.get("heading_deg") or 0))
+    else:
+        data = desc.splat_crop(plan, x, y)
+    out.write_bytes(data)
+    return out
+
+
+def process(mid: str):
+    """Fills what is missing. Every step is optional: a failure is recorded on the memory and nothing else changes."""
+    from connect.backend import transcribe as tr
+    m = load(mid)
+    now = lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")  # noqa: E731
+    if not (m.get("transcript") or {}).get("status") == "done":
+        try:
+            t = tr.transcribe(MEM / m["audio_file"], m["audio_type"])
+            res = dict(status="done", at=now(), **t)
+        except Exception as e:  # noqa: BLE001 - quota, network, ffmpeg: keep the memory, note the failure
+            res = dict(status="failed", at=now(), error=f"{type(e).__name__}: {e}"[:200])
+        update(mid, lambda m: m.__setitem__("transcript", res))
+        print(f"  transcript {mid[:8]}: {res['status']}", flush=True)
+    try:
+        cover_file(m)
+    except Exception as e:  # noqa: BLE001
+        print(f"  cover {mid[:8]}: failed {e!r}"[:200], flush=True)
+    if AUTO_DESCRIBE and not load(mid).get("description"):
+        try:
+            d = desc.describe(m, MEM)
+            update(mid, lambda m: m.__setitem__("description", d))
+        except Exception as e:  # noqa: BLE001
+            print(f"  describe {mid[:8]}: failed {e!r}"[:200], flush=True)
+
+
+def enqueue(mid: str):
+    if AUTO_PROCESS:
+        WORKER.submit(process, mid)
 
 
 COMPASS_RE = re.compile(r"\b(north|south|east|west)(ern|ward|-?east|-?west)?\b", re.I)
@@ -90,6 +224,10 @@ def apply_choice(m: dict, choice: str, reason: str) -> tuple[int, str | None]:
         m.update(visibility="private", draft=False)
         if m.get("share_request"):
             m["share_request"]["status"] = "withdrawn"
+    elif choice == "family":
+        m.update(visibility="family", draft=False)
+        if m.get("share_request"):
+            m["share_request"]["status"] = "withdrawn"
     elif choice == "later":
         m.update(visibility="private", draft=True)
     elif choice == "share":
@@ -102,7 +240,7 @@ def apply_choice(m: dict, choice: str, reason: str) -> tuple[int, str | None]:
         if review["status"] == "approved":
             m["visibility"] = "community"
     else:
-        return 400, "choice must be private, share or later"
+        return 400, "choice must be private, family, share or later"
     m.setdefault("decisions", []).append({"choice": choice, "reason": reason, "at": now})
     return 200, None
 
@@ -116,7 +254,33 @@ def public(meta, viewer=None):
     if d and COMPASS_RE.search(d.get("text", "")):
         out["description"] = None   # written before descriptions became body-relative: ask again rather than say "south"
     out["audio"] = f"/api/memories/{meta['id']}/audio"
+    out["cover"] = f"/api/memories/{meta['id']}/cover"
+    out["cover_source"] = "camera" if (MEM / f"{meta['id']}_camera.jpg").exists() else "scan"
+    t = meta.get("transcript") or {}
+    out["transcript"] = {k: t[k] for k in ("status", "text", "no_speech") if k in t} or None
     return out
+
+
+def gallery(q: dict) -> dict:
+    """Places with their memories, computed from what this viewer may see right now.
+    Author: all of their own memories. Family link: ONLY the owner's family memories."""
+    from connect.backend import places
+    viewer, fam = who(q)
+    if fam is not None:
+        mems = [m for m in all_memories() if m["author_id"] == fam and m["visibility"] == "family"]
+        mode = "family"
+    else:
+        mems = [m for m in all_memories() if viewer and m["author_id"] == viewer]
+        mode = "author"
+    mems = [m for m in mems if m["building_id"] in desc.BUILDINGS]
+    plans = {}
+
+    def plan_for(bid):
+        if bid not in plans:
+            plans[bid] = desc.load_plan(bid)
+        return plans[bid]
+    out = places.group([public(m, viewer) for m in mems], plan_for)
+    return {"mode": mode, "places": out}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -188,28 +352,36 @@ class Handler(BaseHTTPRequestHandler):
                                 public=fp["building"].get("public") is True))
             return self.send(200, out)
         if parts == ["api", "memories"]:
-            viewer, bid = q.get("viewer", ""), q.get("building_id")
-            out = []
-            for f in sorted(MEM.glob("*.json")) if MEM.exists() else []:
-                m = json.loads(f.read_text())
-                if can_see(m, viewer) and (bid is None or m["building_id"] == bid):
-                    out.append(public(m, viewer))
+            (viewer, fam), bid = who(q), q.get("building_id")
+            out = [public(m, viewer) for m in all_memories()
+                   if can_see(m, viewer, fam) and (bid is None or m["building_id"] == bid)]
             return self.send(200, out)
-        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "audio" and ID_RE.match(parts[2]):
+        if parts == ["api", "gallery"]:
+            return self.send(200, gallery(q))
+        if parts == ["api", "family-link"]:
+            tok = family_link_for(q.get("viewer", ""), create=False) if q.get("viewer") else None
+            return self.send(200, {"token": tok, "url": f"/f/{tok}" if tok else None})
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] in ("audio", "cover") and ID_RE.match(parts[2]):
             try:
                 m = load(parts[2])
             except FileNotFoundError:
                 return self.err(404, "no such memory")
-            if not can_see(m, q.get("viewer", "")):
+            if not can_see(m, *who(q)):
                 return self.err(403, "private memory")
-            return self.file(MEM / m["audio_file"], m["audio_type"])
+            if parts[3] == "audio":
+                return self.file(MEM / m["audio_file"], m["audio_type"])
+            try:
+                p = cover_file(m)
+            except Exception as e:  # noqa: BLE001 - no render possible right now
+                return self.err(503, f"no cover yet: {e!r}"[:200])
+            return self.file(p, "image/jpeg") if p else self.err(404, "no cover for this building")
         if (len(parts) == 5 and parts[:2] == ["api", "memories"] and parts[3] == "image"
                 and parts[4] in ("aerial", "splat", "firstperson", "topdown", "aerial2", "topdown2") and ID_RE.match(parts[2])):
             try:
                 m = load(parts[2])
             except FileNotFoundError:
                 return self.err(404, "no such memory")
-            if not can_see(m, q.get("viewer", "")):
+            if not can_see(m, *who(q)):
                 return self.err(403, "private memory")
             return self.file(MEM / f"{m['id']}_{parts[4]}.jpg", "image/jpeg")
         if len(parts) == 1 and (FRONT / parts[0]).is_file():
@@ -220,6 +392,8 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         parts = [p for p in u.path.split("/") if p]
+        if "family" in q:
+            return self.err(403, "a family link is read-only")
         if parts == ["api", "memories"]:
             ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip()
             if ctype not in AUDIO_EXT:
@@ -241,7 +415,7 @@ class Handler(BaseHTTPRequestHandler):
                         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                         visibility="private", draft=q.get("draft") in ("1", "true"), share_request=None,
                         reports=[],   # reserved for listener reports (not implemented yet)
-                        description=None, audio_type=ctype, audio_file=fname)
+                        description=None, transcript={"status": "pending"}, audio_type=ctype, audio_file=fname)
             try:  # optional: where the person faced, and which sweep they stood at (interior)
                 if "heading_deg" in q:
                     meta["heading_deg"] = round(float(q["heading_deg"]) % 360, 1)
@@ -250,18 +424,61 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self.err(400, f"bad request: {e}")
             save(meta)
+            enqueue(mid)                       # transcript + cover + description, in the background
             return self.send(201, public(meta, author))
-        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "decision" and ID_RE.match(parts[2]):
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "frame" and ID_RE.match(parts[2]):
+            # the hat camera frame taken with this recording: becomes the cover image
+            if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "image/jpeg":
+                return self.err(415, "send the frame as image/jpeg")
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= MAX_FRAME:
+                return self.err(400, "frame missing or larger than 3 MB")
+            data = self.rfile.read(n)
+            try:
+                m = load(parts[2])
+            except FileNotFoundError:
+                return self.err(404, "no such memory")
+            if q.get("viewer") != m["author_id"]:
+                return self.err(403, "only the author can add a photo")
+            if data[:2] != b"\xff\xd8":
+                return self.err(400, "not a JPEG")
+            (MEM / f"{m['id']}_camera.jpg").write_bytes(data)
+            return self.send(200, public(m, m["author_id"]))
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "process" and ID_RE.match(parts[2]):
             try:
                 m, req = load(parts[2]), json.loads(self.body() or b"{}")
             except (FileNotFoundError, ValueError):
                 return self.err(404, "no such memory")
             if req.get("viewer") != m["author_id"]:
-                return self.err(403, "only the author decides who hears a memory")
-            code, error = apply_choice(m, req.get("choice"), str(req.get("reason", "chosen"))[:40])
+                return self.err(403, "only the author")
+            if (m.get("transcript") or {}).get("status") != "done":
+                update(m["id"], lambda m: m.__setitem__("transcript", {"status": "pending"}))
+            WORKER.submit(process, m["id"])
+            return self.send(202, {"queued": m["id"]})
+        if parts == ["api", "family-link"]:
+            req = json.loads(self.body() or b"{}")
+            viewer = req.get("viewer") or ""
+            if not viewer:
+                return self.err(400, "viewer required")
+            if req.get("revoke"):
+                revoke_family_link(viewer)
+                return self.send(200, {"token": None, "url": None})
+            tok = family_link_for(viewer)
+            return self.send(200, {"token": tok, "url": f"/f/{tok}"})
+        if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "decision" and ID_RE.match(parts[2]):
+            try:
+                req = json.loads(self.body() or b"{}")
+                load(parts[2])
+            except (FileNotFoundError, ValueError):
+                return self.err(404, "no such memory")
+
+            def decide(m):
+                if req.get("viewer") != m["author_id"]:
+                    return 403, "only the author decides who hears a memory"
+                return apply_choice(m, req.get("choice"), str(req.get("reason", "chosen"))[:40])
+            m, code, error = update(parts[2], decide)
             if error:
                 return self.err(code, error)
-            save(m)
             return self.send(200, public(m, m["author_id"]))
         if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "describe" and ID_RE.match(parts[2]):
             try:
@@ -271,7 +488,7 @@ class Handler(BaseHTTPRequestHandler):
             if not can_see(m, req.get("viewer", "")):
                 return self.err(403, "private memory")
             try:
-                m["description"] = desc.describe(m, MEM)
+                d = desc.describe(m, MEM)
             except LookupError as e:
                 return self.err(503, str(e))
             except urllib.error.HTTPError as e:
@@ -282,26 +499,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self.err(502, f"{e.url.split('?')[0]} answered {e.code}: {e.read()[:200].decode(errors='replace')}")
             except (urllib.error.URLError, KeyError, IndexError, TimeoutError) as e:
                 return self.err(502, f"Couldn't describe this place: {e!r}"[:200])
-            save(m)
+            m, _, _ = update(m["id"], lambda m: m.__setitem__("description", d))
             return self.send(200, public(m, req.get("viewer")))
         return self.err(404, "not found")
 
     def do_PATCH(self):
-        parts = [p for p in urlparse(self.path).path.split("/") if p]
+        u = urlparse(self.path)
+        parts = [p for p in u.path.split("/") if p]
+        if "family" in parse_qs(u.query):
+            return self.err(403, "a family link is read-only")
         if len(parts) == 3 and parts[:2] == ["api", "memories"] and ID_RE.match(parts[2]):
             try:
-                m, req = load(parts[2]), json.loads(self.body() or b"{}")
+                req = json.loads(self.body() or b"{}")
+                load(parts[2])
             except (FileNotFoundError, ValueError):
                 return self.err(404, "no such memory")
-            if req.get("viewer") != m["author_id"]:
-                return self.err(403, "only the author can change visibility")
-            if req.get("visibility") not in ("private", "community"):
-                return self.err(400, "visibility must be private or community")
-            # "community" is only ever a REQUEST (pending_review); "private" always works, at any time.
-            code, error = apply_choice(m, "share" if req["visibility"] == "community" else "private", "toggle")
+
+            def change(m):
+                if req.get("viewer") != m["author_id"]:
+                    return 403, "only the author can change visibility"
+                if req.get("visibility") not in VISIBILITY:
+                    return 400, "visibility must be private, family or community"
+                # "community" is only ever a REQUEST (pending_review); private and family always work, at any time.
+                return apply_choice(m, {"community": "share"}.get(req["visibility"], req["visibility"]), "toggle")
+            m, code, error = update(parts[2], change)
             if error:
                 return self.err(code, error)
-            save(m)
             return self.send(200, public(m, m["author_id"]))
         return self.err(404, "not found")
 

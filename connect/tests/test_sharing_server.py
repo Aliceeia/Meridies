@@ -24,6 +24,7 @@ BID = "test-building"
 @pytest.fixture()
 def api(tmp_path, monkeypatch):
     monkeypatch.setattr(srv, "MEM", tmp_path)
+    monkeypatch.setattr(srv, "AUTO_PROCESS", False)   # no Gemini calls from tests
     flags = {"public": False}
     monkeypatch.setattr(srv.desc, "load_plan", lambda bid: {"building": {"id": bid, **({"public": True} if flags["public"] else {})}})
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
