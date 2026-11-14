@@ -37,6 +37,7 @@ with sync_playwright() as pw:
     page.on("console", lambda m: m.type == "error" and errors.append(m.text))
     page.goto(URL + ("?building=zvKHR9DHNjJ" if STEP == "6" else "?building=1PVeAYmPNJz"))
     page.wait_for_function("() => state.ready === true")
+    page.evaluate("document.getElementById('debug').open = true")   # demo switches (hat, user) live in the debug drawer
     n0 = page.evaluate("state.memories.length")
     print("memories visible at start:", n0)
 
@@ -57,7 +58,7 @@ with sync_playwright() as pw:
         page.screenshot(path=str(OUT / "step2_saved.png"))
 
     if STEP in ("3", "all"):
-        page.mouse.click(5, 5)  # a user gesture -> AudioContext exists
+        page.click("h2")  # a user gesture -> AudioContext exists
         m = page.evaluate("state.memories[0]")
         mx, my = m["position"]["x"], m["position"]["y"]
         walk_to(page, 17.3, 5.7)                     # Yard A, > 6 m away: re-arm
@@ -122,7 +123,7 @@ with sync_playwright() as pw:
         page.wait_for_function(f"() => state.memories.find(x => x.id === '{m['id']}').visibility === 'community'")
         page.select_option("#user", "user-b"); page.wait_for_timeout(500)
         print("after sharing, user-b sees it:", m["id"] in page.evaluate("state.memories.map(x => x.id)"))
-        page.mouse.click(5, 5)
+        page.click("h2")
         walk_to(page, 17.3, 5.7)
         walk_to(page, m["position"]["x"] + 2.0, m["position"]["y"])
         assert page.evaluate("play.near") == m["id"], "user-b did not get the chime/prompt"
@@ -141,7 +142,7 @@ with sync_playwright() as pw:
         page.screenshot(path=str(OUT / "step6_start.png"))
         # turn to face -X (heading 270: toward the dining room), then step forward
         page.evaluate("state.walker.heading = 270; renderWalker()")
-        page.mouse.click(5, 5)
+        page.click("h2")
         page.keyboard.press("ArrowUp")
         page.wait_for_function("() => state.target === null && state.walker.sweep !== 4", timeout=20_000)
         s1 = page.evaluate("state.walker.sweep")
@@ -158,9 +159,21 @@ with sync_playwright() as pw:
         page.click("#rec")
         page.wait_for_selector("body.recording", timeout=5000)
         page.wait_for_function("() => !document.body.classList.contains('recording')", timeout=20_000)
-        page.wait_for_function(f"() => state.memories.some(m => m.sweep === {s1})", timeout=10_000)
-        m = page.evaluate(f"state.memories.filter(m => m.sweep === {s1}).pop()")
+        page.wait_for_selector(".memdot.landed", state="attached", timeout=20_000)   # the new memory's light pulses
+        m = page.evaluate("memById(document.querySelector('.memdot.landed').dataset.id)")
         print("memory:", {k: m.get(k) for k in ("building_id", "sweep", "heading_deg", "position", "visibility")})
+        try:
+            page.wait_for_selector(f".memdot.landed[data-id='{m['id']}']", state="attached", timeout=5000)
+        except Exception:
+            print("DEBUG want", m["id"][:8], "walker", page.evaluate("[state.walker.x, state.walker.y, state.walker.sweep]"),
+                  "dots", page.evaluate("[...document.querySelectorAll('#markers .memdot')].map(d => d.dataset.id.slice(0,8) + ' ' + d.className)"),
+                  "newest", page.evaluate("state.memories.map(m => m.created_at + ' ' + m.id.slice(0,8)).sort().slice(-3)"))
+            raise
+        print("landed pulse: yes | plays back:", page.wait_for_function(f"() => play.playingId === {m['id']!r}", timeout=15_000) is not None)
+        page.screenshot(path=str(OUT / "step7_landed.png"))
+        page.click("#whereami")
+        print("where am I:", page.inner_text("#whereText"))
+        print("list:", page.inner_text("#memList").replace("\n", " | ")[:300], "|", page.inner_text("#more"))
         # walk away two steps and come back: chime prompt, panner direction
         page.evaluate("state.walker.heading = 90; renderWalker()")
         for _ in range(3):

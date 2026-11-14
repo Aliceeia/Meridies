@@ -207,7 +207,7 @@ function neighbourToward(headingDeg) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.closest("button, select, input, textarea")) return;
+  if (e.target.closest("select, input, textarea")) return;   // buttons keep arrow keys for walking
   if (typeof rec !== "undefined" && rec.mr) return;
   const w = state.walker;
   if (e.key === "ArrowLeft") w.heading = norm360(w.heading - 15);
@@ -304,10 +304,8 @@ function renderMemories() {
     const d = document.createElement("div");
     d.className = "mem";
     d.id = `mem-${m.id}`;
-    const when = new Date(m.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
-    d.innerHTML = `<div><b>#${i + 1}</b> <span class="tag ${m.visibility}">${m.visibility}</span>
-      <span class="meta">by ${m.author_id === state.user ? "you" : m.author_id} · ${when}</span></div>
-      <div class="meta dist"></div><div class="desc"></div><div class="row actions"></div>`;
+    d.innerHTML = `<div class="dist"></div><div class="meta who"></div><div class="desc"></div><div class="row actions"></div>`;
+    d.querySelector(".who").textContent = `${whoHuman(m)} · ${whenHuman(m.created_at)}`;
     list.appendChild(d);
   });
   for (const fn of memHooks) fn();
@@ -378,9 +376,11 @@ async function finishRecording(blob) {
   try {
     const q = new URLSearchParams({ ...a, ...rec.facingSaved, building_id: state.plan.building.id, author_id: state.user });
     const r = await fetch(`/api/memories?${q}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
-    if (!r.ok) throw new Error((await r.json()).error);
-    $("recState").textContent = "Saved ✓";
+    const saved = await r.json();
+    if (!r.ok) throw new Error(saved.error);
+    $("recState").textContent = "It's here now.";
     await loadMemories();
+    document.dispatchEvent(new CustomEvent("memory-saved", { detail: saved }));
   } catch (e) {
     $("recState").textContent = "";
     toast(`Save failed: ${e.message}`, 4000);
@@ -416,10 +416,26 @@ function relative(m) {
   const dx = m.position.x - w.x, dy = m.position.y - w.y;
   return { fwd: dx * Math.sin(h) + dy * Math.cos(h), right: dx * Math.cos(h) - dy * Math.sin(h), dist: Math.hypot(dx, dy) };
 }
+// Where something is, said the way a person would say it.
 function describeDir({ fwd, right, dist }) {
-  const a = norm360(deg(Math.atan2(right, fwd)));
-  const names = ["ahead", "ahead right", "right", "behind right", "behind", "behind left", "left", "ahead left"];
-  return `${names[Math.round(a / 45) % 8]}, ${dist.toFixed(1)} m`;
+  if (dist < 0.75) return "right where you're standing";
+  const a = deg(Math.atan2(right, fwd)), side = a > 0 ? "right" : "left", abs = Math.abs(a);
+  const where = abs < 25 ? "ahead of you" : abs < 70 ? `ahead, on your ${side}` : abs < 115 ? `on your ${side}`
+    : abs < 155 ? `behind you, on your ${side}` : "behind you";
+  const how = dist < 1.8 ? "just " : dist < 4 ? "a few steps " : dist < 8 ? "across the room, " : "a little way off, ";
+  return how + where;
+}
+function whenHuman(iso) {
+  const d = new Date(iso), now = new Date(), day = 864e5;
+  const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / day);
+  if (days <= 0) return "earlier today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `on ${d.toLocaleDateString([], { weekday: "long" })}`;
+  return `on ${d.toLocaleDateString([], { month: "long", day: "numeric" })}`;
+}
+function whoHuman(m) {
+  if (m.author_id === state.user) return m.visibility === "community" ? "you left this here, and shared it" : "you left this here";
+  return "someone left this here for everyone";
 }
 function makePanner() {
   const c = audio.ctx(), p = c.createPanner();
@@ -490,8 +506,8 @@ function updateNearUI() {
   const m = play.near && memById(play.near);
   $("nearby").hidden = !m;
   if (!m) return;
-  const idx = state.memories.indexOf(m) + 1;
-  $("nearWhere").textContent = `#${idx} — ${describeDir(relative(m))}`;
+  const where = describeDir(relative(m));
+  $("nearWhere").textContent = `A memory is here — ${where}.`;
   $("listen").hidden = play.playingId === m.id;
   $("stopVoice").hidden = play.playingId !== m.id;
 }

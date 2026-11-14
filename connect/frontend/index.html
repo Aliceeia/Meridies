@@ -4,122 +4,163 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Meridies Memories</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23a371f7'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23f2c879'/%3E%3C/svg%3E">
 <style>
   :root {
-    --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #9aa4af;
-    --walk: #3fd0e0; --zone: #e3b341; --walker: #ffffff; --rec: #ff4d4f; --mem: #a371f7; --community: #3fb950;
+    --bg: #14110f; --panel: #1c1815; --line: #3a322b; --text: #f4ede4; --dim: #b3a596; --faint: #7d7064;
+    --glow: #f2c879; --glow2: #ffdca8; --shared: #9fd8b4; --rec: #ff6b5e;
+    /* names the existing map code uses */
+    --walk: #f2c879; --zone: #e3b341; --walker: #ffffff; --mem: #f2c879; --community: #9fd8b4;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 18px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; height: 100vh; }
-  #mapwrap { position: relative; min-height: 0; display: flex; flex-direction: column; }
-  svg#map { width: 100%; flex: 1 1 auto; min-height: 0; display: block; background: #000; cursor: crosshair; }
-  #view { margin: 0; position: relative; flex: 0 0 auto; height: 46%; background: #000; }
-  #view[hidden] { display: none; }
-  #view img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .25s; }
-  #view img.loading { opacity: .35; }
-  #view figcaption { position: absolute; left: 12px; bottom: 10px; background: #000b; padding: 6px 12px;
-    border-radius: 8px; font-size: 20px; font-weight: 600; }
+    font: 18px/1.45 ui-rounded, "Segoe UI", system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: 7fr 3fr; height: 100vh; }
+
+  /* ---------- the place ---------- */
+  #stage { position: relative; min-width: 0; overflow: hidden; background: #000; }
+  .scene { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; transition: opacity .6s ease; }
+  .scene.back { opacity: 0; pointer-events: none; }
+  #markers { position: absolute; inset: 0; pointer-events: none; transition: opacity .4s; }
+  #markers.stale { opacity: .15; }
+  .memdot { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: auto; cursor: pointer;
+    background: radial-gradient(circle, var(--glow2) 0 18%, rgba(242,200,121,.55) 32%, rgba(242,200,121,0) 70%);
+    animation: breathe 3.2s ease-in-out infinite; transition: left .25s linear, top .25s linear, width .4s, height .4s, opacity .4s; }
+  .memdot.shared { background: radial-gradient(circle, #e6fff0 0 18%, rgba(159,216,180,.55) 32%, rgba(159,216,180,0) 70%); }
+  .memdot.landed { animation: landed 1.6s ease-out 1, breathe 3.2s ease-in-out 1.6s infinite; }
+  @keyframes breathe { 50% { filter: brightness(1.35); transform: translate(-50%, -50%) scale(1.08); } }
+  @keyframes landed { 0% { transform: translate(-50%,-50%) scale(.2); filter: brightness(3); }
+    35% { transform: translate(-50%,-50%) scale(2.2); filter: brightness(2); } 100% { transform: translate(-50%,-50%) scale(1); } }
+  .edgecue { position: absolute; bottom: 22%; padding: 6px 12px; border-radius: 99px; background: rgba(20,17,15,.55);
+    color: var(--glow2); font-size: 15px; pointer-events: none; backdrop-filter: blur(4px); }
+  #pad { position: absolute; left: 20px; bottom: 20px; display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; }
+  #pad button { width: 52px; height: 52px; padding: 0; font-size: 22px; border-radius: 14px; background: rgba(20,17,15,.6);
+    border: 1px solid rgba(255,255,255,.18); color: var(--text); backdrop-filter: blur(6px); }
+  #desync { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+    background: rgba(20,17,15,.75); padding: 8px 10px 8px 16px; border-radius: 99px; font-size: 16px; backdrop-filter: blur(6px); }
+  #desync[hidden] { display: none; }
+  #mapwrap { position: absolute; inset: 0; }
+  #mapwrap[hidden] { display: none; }
+  svg#map { width: 100%; height: 100%; display: block; background: #000; cursor: crosshair; }
   .sweep { cursor: pointer; }
-  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 20px; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 18px; }
-  h1 { font-size: 26px; margin: 0; }
-  .addr { color: var(--dim); font-size: 16px; }
-  .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .label { color: var(--dim); font-size: 14px; text-transform: uppercase; letter-spacing: .06em; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  button, select { font: inherit; font-size: 18px; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line);
-    background: #21262d; color: var(--text); cursor: pointer; }
+  #toast { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); background: rgba(20,17,15,.85);
+    padding: 10px 18px; border-radius: 12px; font-size: 18px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+
+  /* ---------- the three things ---------- */
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 28px 24px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 26px; }
+  .where { color: var(--dim); font-size: 16px; }
+  .where b { color: var(--text); font-weight: 600; }
+  h2 { font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
+  button, select { font: inherit; font-size: 17px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line);
+    background: #2a241f; color: var(--text); cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--dim); }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  .hint { color: var(--dim); font-size: 15px; }
-  #toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); background: #000c;
-    padding: 10px 18px; border-radius: 10px; font-size: 20px; opacity: 0; transition: opacity .2s; pointer-events: none; }
-  #toast.show { opacity: 1; }
-  #rec { background: #3a1214; border-color: var(--rec); color: #ffd7d7; font-weight: 700; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  #nearby { border-radius: 18px; padding: 16px 18px; background: radial-gradient(120% 140% at 0% 0%, rgba(242,200,121,.18), transparent 60%), #241f1a;
+    border: 1px solid rgba(242,200,121,.35); }
+  #nearby[hidden] { display: none; }
+  #nearWhere { font-size: 22px; font-weight: 600; margin-bottom: 12px; }
+  #listen { background: var(--glow); color: #241a0c; border: 0; font-weight: 700; font-size: 19px; padding: 12px 22px; }
+
+  #memList { display: flex; flex-direction: column; gap: 10px; }
+  .mem { border-radius: 14px; padding: 12px 14px; background: #221d19; border: 1px solid var(--line); }
+  .mem.near { border-color: rgba(242,200,121,.6); }
+  .mem.far-hidden { display: none; }
+  .mem .dist { font-size: 18px; font-weight: 600; }
+  .mem .meta { color: var(--dim); font-size: 14px; }
+  .mem .actions:empty { display: none; }
+  .mem .actions { margin-top: 8px; }
+  .mem .actions button { font-size: 14px; padding: 6px 10px; border-radius: 10px; }
+  .mem .desc p { font-size: 16px; }
+  #more { color: var(--faint); font-size: 15px; }
+
+  #rec { width: 100%; padding: 22px; font-size: 24px; font-weight: 700; border-radius: 20px; border: 0;
+    background: linear-gradient(180deg, #ff7b6e, #e9483c); color: #fff; box-shadow: 0 8px 30px rgba(255,107,94,.25); }
   body.recording #rec { display: none; }
+  #recStop { width: 100%; padding: 22px; font-size: 22px; border-radius: 20px; }
+  #recState { display: block; text-align: center; margin-top: 10px; font-size: 20px; color: var(--rec); min-height: 1.4em; }
   body.recording aside { box-shadow: inset 6px 0 0 var(--rec); }
-  #recState { color: var(--rec); }
+  .recnote { color: var(--faint); font-size: 14px; text-align: center; margin-top: 6px; }
   .pulse { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .25; } }
-  .mem { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 16px; }
-  .mem.near { border-color: var(--mem); box-shadow: 0 0 0 2px var(--mem) inset; }
-  .mem .meta { color: var(--dim); font-size: 14px; }
-  .tag { display: inline-block; font-size: 13px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
-  .tag.private { color: var(--mem); } .tag.community { color: var(--community); }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; } }
+
+  #whereami { width: 100%; padding: 16px; font-size: 19px; border-radius: 16px; }
+  #whereText { margin-top: 10px; font-size: 17px; color: var(--dim); }
+
+  details#debug { margin-top: auto; color: var(--dim); font-size: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  details#debug summary { cursor: pointer; color: var(--faint); }
+  details#debug .dbg { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  details#debug select, details#debug button { font-size: 14px; padding: 6px 10px; }
+  #debugMap { height: 260px; position: relative; border-radius: 10px; overflow: hidden; background: #000; }
+  #view { margin: 0; } #view img { width: 100%; border-radius: 8px; } #view figcaption { font-size: 13px; }
+  .tag { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 99px; border: 1px solid currentColor; }
+  .tag.private { color: var(--glow); } .tag.community { color: var(--shared); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; } }
 </style>
 </head>
 <body>
 <main>
-  <div id="mapwrap">
-    <figure id="view" hidden>
-      <img id="viewImg" alt="First-person view at eye level">
-      <figcaption id="viewCap"></figcaption>
-    </figure>
-    <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Walk map"></svg>
-    <div id="toast" role="status"></div>
-  </div>
-  <aside>
-    <div>
-      <h1 id="bname">Loading…</h1>
-      <div class="addr" id="baddr"></div>
-      <div class="row" style="margin-top:10px">
-        <span class="label">Building</span>
-        <select id="building"></select>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <span class="label">Listening as</span>
-        <select id="user">
-          <option value="user-a">User A</option>
-          <option value="user-b">User B</option>
-        </select>
-      </div>
+  <section id="stage" aria-label="The place">
+    <iframe id="sc0" class="scene" title="3D view of the place" allow="xr-spatial-tracking; fullscreen" hidden></iframe>
+    <iframe id="sc1" class="scene back" title="3D view of the place (loading)" allow="xr-spatial-tracking; fullscreen" hidden></iframe>
+    <div id="markers" aria-hidden="true"></div>
+    <div id="mapwrap" hidden><svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Walk map"></svg></div>
+    <div id="desync" hidden><span>You looked around on your own — memory lights paused.</span><button id="resync">Re-sync</button></div>
+    <div id="pad" aria-label="Walk">
+      <span></span><button id="padUp" aria-label="Step forward">↑</button><span></span>
+      <button id="padLeft" aria-label="Turn left">↶</button><button id="padDown" aria-label="Step back">↓</button><button id="padRight" aria-label="Turn right">↷</button>
     </div>
+    <div id="toast" role="status"></div>
+  </section>
 
-    <section>
-      <div class="label">Walker</div>
-      <div class="big"><span id="hdg">000</span>° <span id="zone" style="font-size:20px;font-weight:500;color:var(--zone)"></span></div>
-      <div style="font-size:20px">Facing <b id="compass">—</b></div>
-      <div class="hint" id="pos"></div>
-      <div class="hint">Indoors: click a highlighted sweep, or ↑ / ↓ to step to the next sweep ahead / behind. Yard: click to walk. ← → turn. Big number = map heading.</div>
-    </section>
+  <aside>
+    <div class="where" id="whereLine">Loading the place…</div>
 
-    <section id="nearby" hidden>
-      <div class="label">Memory nearby</div>
-      <div class="big" id="nearWhere" style="font-size:26px;color:var(--mem)"></div>
-      <div class="row" style="margin-top:8px">
-        <button id="listen" style="font-size:22px;padding:14px 22px;border-color:var(--mem)">▶ Listen</button>
+    <section id="nearby" hidden aria-live="polite">
+      <div id="nearWhere"></div>
+      <div class="row">
+        <button id="listen">▶ Listen</button>
         <button id="stopVoice" hidden>■ Stop</button>
         <button id="dismiss">Not now</button>
       </div>
     </section>
 
     <section>
-      <div class="label">Leave a memory here</div>
-      <div class="row">
-        <button id="rec">● Record 10 s</button>
-        <button id="recStop" hidden>■ Stop</button>
-        <span id="recState" class="big" style="font-size:24px"></span>
-      </div>
-      <div class="hint">The microphone opens only when you press Record, and closes after 10 s. Saved as private.</div>
-    </section>
-
-    <section>
-      <div class="label">Memories you can hear (<span id="memCount">0</span>)</div>
+      <h2>Memories near you</h2>
       <div id="memList"></div>
+      <div id="more"></div>
     </section>
 
     <section>
-      <div class="label">Hardware link</div>
-      <label class="row" style="cursor:pointer"><input type="checkbox" id="hat" style="width:22px;height:22px">
-        Hat is warning (memory audio muted)</label>
-      <div class="hint">The hat sets this via <code>setHatWarning(true|false)</code>. Demo toggle here.</div>
+      <button id="rec">● Leave a memory here</button>
+      <button id="recStop" hidden>■ Stop</button>
+      <span id="recState"></span>
+      <div class="recnote">Records 10 seconds, only when you press. Private until you share it.</div>
     </section>
+
+    <section>
+      <button id="whereami">Where am I?</button>
+      <div id="whereText" aria-live="polite"></div>
+    </section>
+
+    <details id="debug">
+      <summary>debug</summary>
+      <div class="dbg">
+        <div><b id="bname"></b> <span id="baddr"></span></div>
+        <label class="row">Building <select id="building"></select></label>
+        <label class="row">Listening as <select id="user"><option value="user-a">User A</option><option value="user-b">User B</option></select></label>
+        <label class="row"><input type="checkbox" id="hat"> Hat is warning (memory audio muted) — <code>setHatWarning()</code></label>
+        <div>heading <span id="hdg">000</span>° · <span id="zone"></span> · facing <span id="compass">—</span> · <span id="pos"></span> · <span id="memCount">0</span> memories</div>
+        <div id="debugMap"></div>
+        <figure id="view" hidden><img id="viewImg" alt="Pre-rendered view"><figcaption id="viewCap"></figcaption></figure>
+      </div>
+    </details>
   </aside>
 </main>
 <script src="app.js"></script>
+<script src="experience.js"></script>
 </body>
 </html>
