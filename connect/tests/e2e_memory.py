@@ -103,6 +103,36 @@ with sync_playwright() as pw:
             page.reload(); page.wait_for_function("() => state.memories.length > 0")
             page.screenshot(path=str(OUT / "step4_described.png"))
 
+    if STEP in ("5", "all"):
+        api = URL + "api/memories"
+        mine = [m for m in page.evaluate("state.memories") if m["author_id"] == "user-a"]
+        m = mine[0]
+        # start from private
+        page.request.patch(f"{api}/{m['id']}", data={"viewer": "user-a", "visibility": "private"})
+        page.select_option("#user", "user-a"); page.wait_for_timeout(300)
+        page.select_option("#user", "user-b"); page.wait_for_timeout(500)
+        seen_b = page.evaluate("state.memories.map(x => x.id)")
+        print("user-b sees user-a's private memory:", m["id"] in seen_b)
+        assert m["id"] not in seen_b
+        assert page.request.get(f"{api}/{m['id']}/audio?viewer=user-b").status == 403
+        assert page.request.patch(f"{api}/{m['id']}", data={"viewer": "user-b", "visibility": "community"}).status == 403
+        # author shares it
+        page.select_option("#user", "user-a"); page.wait_for_timeout(500)
+        page.click(f"#mem-{m['id']} >> text=Share with community")
+        page.wait_for_function(f"() => state.memories.find(x => x.id === '{m['id']}').visibility === 'community'")
+        page.select_option("#user", "user-b"); page.wait_for_timeout(500)
+        print("after sharing, user-b sees it:", m["id"] in page.evaluate("state.memories.map(x => x.id)"))
+        page.mouse.click(5, 5)
+        walk_to(page, 17.3, 5.7)
+        walk_to(page, m["position"]["x"] + 2.0, m["position"]["y"])
+        assert page.evaluate("play.near") == m["id"], "user-b did not get the chime/prompt"
+        assert page.evaluate("play.playingId") is None
+        page.click("#listen")
+        page.wait_for_function("() => play.playingId !== null", timeout=10_000)
+        print("user-b hears it after confirming:", page.inner_text("#nearWhere"))
+        assert page.query_selector(f"#mem-{m['id']} >> text=Make private") is None, "non-author got a visibility toggle"
+        page.screenshot(path=str(OUT / "step5_userb.png"))
+
     b.close()
 
 print("page errors:", errors or "none")

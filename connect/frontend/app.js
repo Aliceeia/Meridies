@@ -463,6 +463,33 @@ memHooks.push(() => {
   }
 });
 
+// ---------- the social case: who is listening, and what they may hear ----------
+$("user").addEventListener("change", async (e) => {
+  stopVoice(); speechSynthesis.cancel();
+  state.user = e.target.value;
+  play.near = null; play.armed.clear();   // a new listener hears memories fresh
+  await loadMemories();
+  toast(`Listening as ${e.target.selectedOptions[0].text}`);
+});
+memHooks.push(() => {
+  for (const m of state.memories) {
+    if (m.author_id !== state.user) continue;   // only the author can change who hears it
+    const actions = document.querySelector(`#mem-${m.id} .actions`);
+    const b = document.createElement("button");
+    const next = m.visibility === "private" ? "community" : "private";
+    b.textContent = next === "community" ? "Share with community" : "Make private";
+    b.onclick = async () => {
+      b.disabled = true;
+      const r = await fetch(`/api/memories/${m.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ viewer: state.user, visibility: next }) });
+      if (!r.ok) { b.disabled = false; return toast((await r.json()).error); }
+      Object.assign(m, await r.json());
+      renderMemories();
+    };
+    actions.prepend(b);
+  }
+});
+
 // compass heading once the map is georeferenced against Vexcel
 onWalkerChange(() => {
   const g = state.plan.georef;
