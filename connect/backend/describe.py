@@ -186,6 +186,6 @@ def describe(m: dict, mem_dir: Path) -> dict:
     for _, _, caption, data in images:
         parts += [{"text": caption}, gemini.image_part(data)]
     text = gemini.generate(parts)
-    return dict(text=text, model=gemini.model_name(), lat=round(lat, 7), lon=round(lon, 7),
+    return dict(text=text, model=gemini.last_model or gemini.model_name(), lat=round(lat, 7), lon=round(lon, 7),
                 created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 images=[dict(kind=k, label=lbl) for k, lbl, _, _ in images], **extra)

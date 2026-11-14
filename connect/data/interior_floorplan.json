@@ -1265,7 +1265,211 @@
    ]
   ]
  ],
- "hazards": [],
+ "hazards": [
+  {
+   "position": [
+    -4.54,
+    -1.63
+   ],
+   "height_m": 1.6,
+   "kind": "chandelier",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11,
+    24
+   ],
+   "detections": 13,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -8.99,
+    -4.4
+   ],
+   "height_m": 1.6,
+   "kind": "pendant light",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    8,
+    11,
+    12,
+    13,
+    15,
+    16,
+    18
+   ],
+   "detections": 7,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -7.58,
+    1.49
+   ],
+   "height_m": 1.8,
+   "kind": "pendant light",
+   "room": "Hallway",
+   "seen_from_sweeps": [
+    24,
+    25,
+    26,
+    31
+   ],
+   "detections": 5,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -8.6,
+    -1.2
+   ],
+   "height_m": 1.88,
+   "kind": "soffit",
+   "room": "Kitchen",
+   "seen_from_sweeps": [
+    19,
+    23,
+    24,
+    25
+   ],
+   "detections": 4,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -5.31,
+    0.6
+   ],
+   "height_m": 1.3,
+   "kind": "wall shelf",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    6,
+    7,
+    24
+   ],
+   "detections": 4,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -0.96,
+    2.08
+   ],
+   "height_m": 1.4,
+   "kind": "open door",
+   "room": "Living Room",
+   "seen_from_sweeps": [
+    1,
+    34,
+    35
+   ],
+   "detections": 5,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -12.73,
+    -0.51
+   ],
+   "height_m": 1.4,
+   "kind": "wall cabinet",
+   "room": "Kitchen",
+   "seen_from_sweeps": [
+    18,
+    19,
+    20
+   ],
+   "detections": 4,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -3.32,
+    0.98
+   ],
+   "height_m": 1.6,
+   "kind": "pendant light",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    5,
+    32,
+    34
+   ],
+   "detections": 3,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -2.5,
+    -3.76
+   ],
+   "height_m": 1.8,
+   "kind": "taxidermy mount",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    5,
+    9,
+    10
+   ],
+   "detections": 3,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -3.67,
+    0.82
+   ],
+   "height_m": 1.35,
+   "kind": "wall shelf",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    6,
+    31
+   ],
+   "detections": 2,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    0.69,
+    3.82
+   ],
+   "height_m": 1.95,
+   "kind": "pendant light",
+   "room": "Living Room",
+   "seen_from_sweeps": [
+    0,
+    1
+   ],
+   "detections": 2,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -12.14,
+    -3.33
+   ],
+   "height_m": 1.95,
+   "kind": "doorway header",
+   "room": "Hallway",
+   "seen_from_sweeps": [
+    21,
+    22
+   ],
+   "detections": 2,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  }
+ ],
  "rooms": [
   {
    "id": "613htqkzf66zz7hf7n8kzszed",
@@ -2991,12 +3195,279 @@
   "frame": "metres, Model API frame (+Z up, measured), floor z=0",
   "showcase_ss": "ss = index + 1 (1-based, measured)",
   "hazards": {
-   "method": "Gemini Vision (gemini-3.8-flash) on 4 first-person renders per sweep; detection placed from sweep position + yaw + frame_x (HFOV~100 deg) + estimated distance; trusted only if seen from >=2 sweeps within 1.0 m / 0.3 m",
-   "renders": 156,
-   "answered": 1,
-   "failed": 155,
-   "raw_detections": 0,
-   "rejected_single_sweep": []
+   "method": "Gemini Vision (gemini-3.7-flash) on 4 first-person renders per sweep; detection placed from sweep position + yaw + frame_x (HFOV~100 deg) + estimated distance; trusted only if seen from >=2 sweeps within 1.0 m / 0.3 m",
+   "renders": 39,
+   "answered": 132,
+   "failed": 2,
+   "raw_detections": 81,
+   "rejected_single_sweep": [
+    {
+     "position": [
+      -4.79,
+      -2.4
+     ],
+     "height_m": 1.6,
+     "kind": "chandelier",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      6
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.21,
+      -1.53
+     ],
+     "height_m": 1.6,
+     "kind": "chandelier",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      6
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -5.67,
+      -3.88
+     ],
+     "height_m": 1.3,
+     "kind": "candelabra",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      8
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -8.42,
+      -4.07
+     ],
+     "height_m": 1.8,
+     "kind": "hanging lantern",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      9
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.96,
+      -4.19
+     ],
+     "height_m": 1.5,
+     "kind": "hanging censer",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      9
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.88,
+      -0.55
+     ],
+     "height_m": 2.0,
+     "kind": "beam",
+     "room": "Living Room",
+     "seen_from_sweeps": [
+      10
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -8.74,
+      -3.7
+     ],
+     "height_m": 1.4,
+     "kind": "pendant light",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      14
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -8.45,
+      -5.24
+     ],
+     "height_m": 1.6,
+     "kind": "pendant light",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      17
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -11.51,
+      -5.3
+     ],
+     "height_m": 1.35,
+     "kind": "extending mirror",
+     "room": "Bathroom",
+     "seen_from_sweeps": [
+      21
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -10.64,
+      -1.56
+     ],
+     "height_m": 1.95,
+     "kind": "doorway header",
+     "room": "Kitchen",
+     "seen_from_sweeps": [
+      23
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -7.25,
+      -0.04
+     ],
+     "height_m": 1.95,
+     "kind": "doorway header",
+     "room": "Hallway",
+     "seen_from_sweeps": [
+      23
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -4.51,
+      1.24
+     ],
+     "height_m": 1.85,
+     "kind": "pendant light",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      25
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.96,
+      1.72
+     ],
+     "height_m": 1.2,
+     "kind": "shelf",
+     "room": "Closet",
+     "seen_from_sweeps": [
+      32
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.88,
+      4.79
+     ],
+     "height_m": 1.2,
+     "kind": "shelf",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      33
+     ],
+     "detections": 2,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.52,
+      2.04
+     ],
+     "height_m": 1.8,
+     "kind": "pendant light",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      33
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -2.79,
+      3.67
+     ],
+     "height_m": 1.3,
+     "kind": "shelf",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      33
+     ],
+     "detections": 2,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.83,
+      2.84
+     ],
+     "height_m": 1.4,
+     "kind": "clothes rack",
+     "room": "Closet",
+     "seen_from_sweeps": [
+      34
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.71,
+      1.24
+     ],
+     "height_m": 1.6,
+     "kind": "shelf",
+     "room": "Closet",
+     "seen_from_sweeps": [
+      34
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      0.21,
+      1.29
+     ],
+     "height_m": 1.4,
+     "kind": "open door",
+     "room": "Living Room",
+     "seen_from_sweeps": [
+      35
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    }
+   ]
   }
  }
 }

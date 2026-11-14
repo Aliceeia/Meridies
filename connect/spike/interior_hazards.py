@@ -55,32 +55,38 @@ def render_chunk(sweeps):
     return done
 
 
-def ask_sweep(sweep):
-    """All four views of one sweep in ONE request (free tier allows ~20 requests/day/model).
-    Returns one answer per view, cached per view."""
-    outs = {y: ANS / f"{MODEL}_s{sweep}_y{y:.3f}.json" for y in YAWS}
+def ask_group(sweeps_):
+    """All four views of several sweeps in ONE request (free tier allows ~20 requests/day/model).
+    Returns one answer per view, cached per view; fully cached groups cost nothing."""
+    outs = {(s, y): ANS / f"{MODEL}_s{s}_y{y:.3f}.json" for s in sweeps_ for y in YAWS}
     if all(p.exists() for p in outs.values()):
         return [json.loads(p.read_text()) for p in outs.values()]
-    parts = [{"text": PROMPT + "\n\n" + FORMAT + "\n\nThere are 4 images below, labelled VIEW 0 to VIEW 3. Answer "
-              "with JSON {\"views\": [{\"view\": n, \"hazards\": [...]}, ...]} with one entry per view, and do not "
-              "report the same object twice within one view."}]
-    for i, y in enumerate(YAWS):
-        png = (CACHE / f"{MODEL}_ss{sweep + 1}_sr0.000,{y:.3f}.png").read_bytes()
-        parts += [{"text": f"VIEW {i}:"}, gemini.image_part(png, "image/png")]
-    text = gemini.generate(parts, json_out=True)
+    parts = [{"text": PROMPT + "\n\n" + FORMAT + f"\n\nThere are {len(outs)} separate images below, each labelled with "
+              "an id like s3_v0. Judge each image on its own. Answer with JSON {\"views\": [{\"id\": \"s3_v0\", "
+              "\"hazards\": [...]}, ...]} with one entry per image id, and do not report the same object twice "
+              "within one image."}]
+    for s in sweeps_:
+        for i, y in enumerate(YAWS):
+            jp = (CACHE / f"{MODEL}_ss{s + 1}_sr0.000,{y:.3f}.jpg")
+            if not jp.exists():  # send JPEG: a 12-image request stays small
+                from PIL import Image
+                Image.open(CACHE / f"{MODEL}_ss{s + 1}_sr0.000,{y:.3f}.png").convert("RGB").save(jp, "JPEG", quality=85)
+            parts += [{"text": f"IMAGE s{s}_v{i}:"}, gemini.image_part(jp.read_bytes())]
+    text = gemini.generate(parts, json_out=True, timeout=300)
     try:
-        views = {int(v["view"]): v.get("hazards") or [] for v in json.loads(text)["views"]}
+        views = {str(v["id"]): v.get("hazards") or [] for v in json.loads(text)["views"]}
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         views, bad = {}, text[:500]
     else:
         bad = None
     res = []
-    for i, y in enumerate(YAWS):
-        r = {"sweep": sweep, "yaw": y, "model": gemini.model_name(), "hazards": views.get(i, [])}
-        if bad:
-            r["unparsed"] = bad
-        outs[y].write_text(json.dumps(r, indent=1))
-        res.append(r)
+    for s in sweeps_:
+        for i, y in enumerate(YAWS):
+            r = {"sweep": s, "yaw": y, "model": gemini.model_name(), "hazards": views.get(f"s{s}_v{i}", [])}
+            if bad:
+                r["unparsed"] = bad
+            outs[(s, y)].write_text(json.dumps(r, indent=1))
+            res.append(r)
     return res
 
 
@@ -96,6 +102,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--render-procs", type=int, default=3)
     ap.add_argument("--gemini-threads", type=int, default=2)
+    ap.add_argument("--per-request", type=int, default=3, help="sweeps (x4 views) per Gemini request")
     a = ap.parse_args()
     fp = json.loads((DATA / "interior_floorplan.json").read_text())
     sweeps = {s["index"]: s for s in fp["sweeps"]}
@@ -115,8 +122,10 @@ def main():
     jobs = [s for s in sweeps if all((CACHE / f"{MODEL}_ss{s + 1}_sr0.000,{y:.3f}.png").exists() for y in YAWS)]
     ANS.mkdir(parents=True, exist_ok=True)
     answers, failed = [], []
+    groups = [jobs[i:i + a.per_request] for i in range(0, len(jobs), a.per_request)]
+    print(f"gemini ({gemini.model_name()}): {len(jobs)} sweeps in {len(groups)} requests", flush=True)
     with ThreadPoolExecutor(a.gemini_threads) as ex:
-        futs = {ex.submit(ask_sweep, s): s for s in jobs}
+        futs = {ex.submit(ask_group, g): g for g in groups}
         for i, f in enumerate(as_completed(futs), 1):
             try:
                 answers.extend(f.result())
@@ -125,8 +134,7 @@ def main():
                 if hasattr(e, "read"):
                     msg += " " + e.read()[:200].decode(errors="replace").replace("\n", " ")
                 failed.append((futs[f], msg))
-            if i % 5 == 0:
-                print(f"  gemini {i}/{len(jobs)} sweeps  ({time.time() - t0:.0f}s)", flush=True)
+            print(f"  gemini request {i}/{len(groups)} done  ({time.time() - t0:.0f}s)", flush=True)
     print(f"gemini: {len(answers)} views answered, {len(failed)} sweeps failed", flush=True)
     for s, msg in failed[:3]:
         print(f"   sweep {s}: {msg}", flush=True)

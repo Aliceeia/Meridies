@@ -44,25 +44,39 @@ def image_part(data: bytes, mime: str = "image/jpeg") -> dict:
     return {"inline_data": {"mime_type": mime, "data": base64.b64encode(data).decode()}}
 
 
-def generate(parts: list, *, json_out: bool = False, retries: int = 3, timeout: int = 120) -> str:
-    """parts: list of {"text": ...} or image_part(...). Returns the text answer."""
+FALLBACKS = ("gemini-3.7-flash", "gemini-3.6-flash")  # each model has its own free-tier quota
+last_model = None  # the model that produced the most recent answer
+
+
+def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: int = 120, fallback: bool = True) -> str:
+    """parts: list of {"text": ...} or image_part(...). Returns the text answer.
+    On quota (429) or overload (503) it retries, then moves to the next model in FALLBACKS."""
+    global last_model
     body = {"contents": [{"role": "user", "parts": parts}]}
     if json_out:
         body["generationConfig"] = {"responseMimeType": "application/json"}
-    req = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name()}:generateContent", method="POST",
-        headers={"x-goog-api-key": api_key(), "Content-Type": "application/json"}, data=json.dumps(body).encode())
-    for attempt in range(retries):
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                out = json.loads(r.read())
-            return " ".join(p.get("text", "") for p in out["candidates"][0]["content"]["parts"]).strip()
-        except urllib.error.HTTPError as e:
-            if e.code in (429, 500, 503) and attempt < retries - 1:
-                time.sleep(5 * (attempt + 1))
-                continue
-            raise
-    raise RuntimeError("unreachable")
+    data = json.dumps(body).encode()
+    models = [model_name()] + ([m for m in FALLBACKS if m != model_name()] if fallback else [])
+    err = None
+    for m in models:
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent", method="POST",
+            headers={"x-goog-api-key": api_key(), "Content-Type": "application/json"}, data=data)
+        for attempt in range(retries):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    out = json.loads(r.read())
+                last_model = m
+                return " ".join(p.get("text", "") for p in out["candidates"][0]["content"]["parts"]).strip()
+            except urllib.error.HTTPError as e:
+                err = e
+                if e.code == 503 and attempt < retries - 1:
+                    time.sleep(5 * (attempt + 1))
+                    continue
+                if e.code in (429, 503):
+                    break          # quota or overload: next model
+                raise
+    raise err
 
 
 if __name__ == "__main__":
