@@ -5,7 +5,7 @@ Two halves, connected by one thing only: a saved recording.
 | Page | What |
 |---|---|
 | `/live` | The hat. Status board (the obstacle list from `integration/` on ZeroMQ 5556; tones come from `audio/engine.py`), 10 s recording, camera context on demand, demo warning switch. Works with no network: the page is cached by `sw.js`, recordings go to IndexedDB first and upload whenever the server answers. You choose where you are; nothing tracks you. |
-| `/` | The gallery. Places (derived from saved memories), each a timeline of memory cards: cover, one-line transcript, Play, description behind "show text", visibility badge. **L** = listen mode (screen dark; ← → places, ↑ ↓ memories, Space play, D describe, T take me there, H help). |
+| `/` | MeriVerse, the gallery. A timeline of memories grouped by day, filterable by place (places are derived from saved memories). Each entry: cover, excerpt, Play, Take me there; opening one shows the full memory, the description of the spot, and "Who can hear this". Tabs: **Memories** / **Shared with me** (family memories from people whose circle you're in). The profile menu holds the account switch, **Your circle** (members + family link), the hat's live view and demo data. **L** = listen mode (screen dark; ← → places, ↑ ↓ memories, Space play, D describe, T take me there, H help). Design tokens are one `:root` block in `gallery.html`. |
 | `/f/<token>` | Family view: only the owner's `family` memories, read-only. Made and turned off from the gallery's "Family link". |
 | `/walk` | The 3D walk ("Take me there": `/walk?building=&memory=` stands you a few steps from the memory, facing it; first key chimes it). |
 

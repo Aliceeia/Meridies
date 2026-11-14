@@ -121,7 +121,7 @@
     there() {
       const m = mem();
       if (!m) { EAR.edge(); return say("Nothing to go to here."); }
-      if (G.mode !== "author") { EAR.edge(); return say("Take me there is not available on a family link."); }
+      if (G.mode === "family") { EAR.edge(); return say("Take me there is not available on a family link."); }
       gx.stopMemory(); EAR.play();
       say("Opening the 3D walk at that spot. When it opens, press any key to hear where the memory is.",
           { then: () => (location.href = gx.takeMeThere(m)) });
@@ -135,6 +135,7 @@
     if (on === L.on) return;
     L.on = on;
     $("listen").hidden = !on;
+    $("listenBtn").setAttribute("aria-pressed", String(on));
     if (on) {
       if (document.activeElement) document.activeElement.blur();
       EAR.on();
@@ -151,6 +152,7 @@
                  d: "describe", D: "describe", t: "there", T: "there", h: "help", H: "help", Escape: "leave" };
   document.addEventListener("keydown", (e) => {
     if (e.target.closest("input, select, textarea")) return;
+    if (!L.on && document.querySelector("dialog[open]")) return;       // a dialog owns the keys while it's open
     if (!L.on) {
       if (e.key === "l" || e.key === "L") { e.preventDefault(); setListen(true); }
       return;
@@ -172,7 +174,7 @@
   });
 
   // ---------- hat buttons ----------
-  if (window.EventSource && G.mode === "author") {      // the hat belongs to its wearer, not to a family link
+  if (window.EventSource && G.mode !== "family") {      // the hat belongs to its wearer, not to a family link
     const es = new EventSource("/api/hat/events");
     es.onmessage = (ev) => {
       let b;

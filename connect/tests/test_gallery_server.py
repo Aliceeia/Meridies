@@ -27,6 +27,8 @@ JPEG = b"\xff\xd8\xff\xe0fake-jpeg"
 def api(tmp_path, monkeypatch):
     monkeypatch.setattr(srv, "MEM", tmp_path)
     monkeypatch.setattr(srv, "LINKS", tmp_path / "links.json")
+    monkeypatch.setattr(srv, "CIRCLES", tmp_path / "circles.json")
+    monkeypatch.setattr(srv, "SETTINGS", tmp_path / "settings.json")
     monkeypatch.setattr(srv, "AUTO_PROCESS", False)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -119,6 +121,24 @@ def test_places_come_only_from_visible_memories(api):
     assert call("GET", "/api/gallery?viewer=user-b")[1]["places"] == []
     # nothing stores a place or a path: the only files are the memories themselves
     assert {p.suffix for p in srv.MEM.iterdir()} <= {".json", ".webm"}
+
+
+def test_circle_members_see_only_family_under_shared_with_me(api):
+    call, record, vis = api
+    priv, fam = record(), record()
+    vis(fam, "family")
+    shared = lambda who: [m["id"] for p in call("GET", f"/api/gallery?viewer={who}&scope=shared")[1]["places"]  # noqa: E731
+                          for m in p["memories"]]
+    assert shared("user-b") == []                                    # not in the circle yet
+    assert call("GET", f"/api/memories/{fam['id']}/audio?viewer=user-b")[0] == 403
+    assert call("POST", "/api/circle", {"viewer": "user-a", "members": ["user-b"]})[1]["members"] == ["user-b"]
+    assert shared("user-b") == [fam["id"]]
+    assert call("GET", f"/api/memories/{fam['id']}/audio?viewer=user-b", raw=True)[0] == 200
+    assert call("GET", f"/api/memories/{priv['id']}/audio?viewer=user-b")[0] == 403    # private stays private
+    assert call("GET", "/api/circle?viewer=user-b")[1]["in_circles_of"] == ["user-a"]
+    assert call("PATCH", f"/api/memories/{fam['id']}", {"viewer": "user-b", "visibility": "private"})[0] == 403
+    call("POST", "/api/circle", {"viewer": "user-a", "members": []})   # removed: access ends at once
+    assert shared("user-b") == []
 
 
 def test_place_of_is_pure_and_uses_rooms():

@@ -112,6 +112,21 @@ def all_memories():
     return [m for m in out if not m.get("is_sample")] if settings().get("hide_samples") else out
 
 
+# ---------- MeriCircle: the people an author shares "family" memories with ----------
+CIRCLES = DATA / "circles.json"     # {author_id: [member_id, ...]}; git-ignored. Only the author edits their own.
+
+
+def circles() -> dict:
+    try:
+        return json.loads(CIRCLES.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def in_circle(author: str, viewer: str) -> bool:
+    return bool(viewer) and viewer in circles().get(author, [])
+
+
 # ---------- family links: a read-only key to one author's family memories ----------
 def _links() -> dict:
     try:
@@ -153,7 +168,11 @@ def can_see(meta, viewer, fam_owner=None):
         return True
     if meta["visibility"] == "community":
         return True
-    return meta["visibility"] == "family" and fam_owner is not None and fam_owner == meta["author_id"]
+    if meta["visibility"] != "family":
+        return False
+    if fam_owner is not None:
+        return fam_owner == meta["author_id"]
+    return in_circle(meta["author_id"], viewer)
 
 
 # ---------- after save: transcript, cover image, description (one at a time, never blocks the upload) ----------
@@ -336,6 +355,10 @@ def gallery(q: dict) -> dict:
     if fam is not None:
         mems = [m for m in all_memories() if m["author_id"] == fam and m["visibility"] == "family"]
         mode = "family"
+    elif q.get("scope") == "shared":     # "Shared with me": family memories from people whose circle includes me
+        mems = [m for m in all_memories() if m["visibility"] == "family" and m["author_id"] != viewer
+                and in_circle(m["author_id"], viewer)]
+        mode = "shared"
     else:
         mems = [m for m in all_memories() if viewer and m["author_id"] == viewer]
         mode = "author"
@@ -347,7 +370,10 @@ def gallery(q: dict) -> dict:
             plans[bid] = desc.load_plan(bid)
         return plans[bid]
     out = places.group([public(m, viewer) for m in mems], plan_for)
-    return {"mode": mode, "places": out}
+    for p in out:   # sharing with everyone is offered only in public spaces
+        p["building"]["public"] = plan_for(p["building"]["id"])["building"].get("public") is True
+        p["building"]["address"] = plan_for(p["building"]["id"])["building"].get("address")
+    return {"mode": mode, "places": out, **({"owner": fam} if mode == "family" else {})}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -472,6 +498,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, out)
         if parts == ["api", "gallery"]:
             return self.send(200, gallery(q))
+        if parts == ["api", "circle"]:
+            viewer = q.get("viewer", "")
+            return self.send(200, {"members": circles().get(viewer, []) if viewer else [],
+                                   "in_circles_of": sorted(a for a, ms in circles().items() if viewer and viewer in ms)})
         if parts == ["api", "settings"]:
             s = settings()
             every = [json.loads(f.read_text()) for f in MEM.glob("*.json") if ID_RE.match(f.stem)] if MEM.exists() else []
@@ -598,6 +628,17 @@ class Handler(BaseHTTPRequestHandler):
             except (urllib.error.URLError, TimeoutError, KeyError, IndexError) as e:
                 return self.err(502, f"couldn't describe: {e!r}"[:200])
             return self.send(200, {"text": text})
+        if parts == ["api", "circle"]:
+            # the author sets who is in their circle; members see the author's family memories under "Shared with me"
+            req = json.loads(self.body() or b"{}")
+            viewer, members = req.get("viewer") or "", req.get("members")
+            if not viewer or not isinstance(members, list) or not all(isinstance(x, str) and x for x in members):
+                return self.err(400, "viewer and a list of members required")
+            with MEM_LOCK:
+                c = circles()
+                c[viewer] = sorted({x for x in members if x != viewer})
+                CIRCLES.write_text(json.dumps(c, indent=1))
+            return self.send(200, {"members": c[viewer]})
         if parts == ["api", "settings"]:
             req = json.loads(self.body() or b"{}")
             if not req.get("viewer"):
