@@ -50,7 +50,7 @@ def public(meta):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        print(f"{self.command} {self.path.split('?')[0]} -> {args[1] if len(args) > 1 else ''}")
+        print(f"{self.command} {self.path.split('?')[0]} -> {args[1] if len(args) > 1 else ''}", flush=True)
 
     # helpers
     def send(self, code, body=b"", ctype="application/json"):
@@ -72,10 +72,10 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("body too large")
         return self.rfile.read(n)
 
-    def file(self, path: Path):
+    def file(self, path: Path, ctype=None):
         if not path.is_file():
             return self.err(404, "not found")
-        self.send(200, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+        self.send(200, path.read_bytes(), ctype or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
 
     # routes
     def do_GET(self):
@@ -105,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.err(404, "no such memory")
             if not can_see(m, q.get("viewer", "")):
                 return self.err(403, "private memory")
-            return self.file(MEM / m["audio_file"])
+            return self.file(MEM / m["audio_file"], m["audio_type"])
         if len(parts) == 1 and (FRONT / parts[0]).is_file():
             return self.file(FRONT / parts[0])
         return self.err(404, "not found")

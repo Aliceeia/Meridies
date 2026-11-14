@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Meridies Memories</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23a371f7'/%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #9aa4af;
@@ -30,6 +31,17 @@
   #toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); background: #000c;
     padding: 10px 18px; border-radius: 10px; font-size: 20px; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
+  #rec { background: #3a1214; border-color: var(--rec); color: #ffd7d7; font-weight: 700; }
+  body.recording #rec { display: none; }
+  body.recording aside { box-shadow: inset 6px 0 0 var(--rec); }
+  #recState { color: var(--rec); }
+  .pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .mem { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 16px; }
+  .mem.near { border-color: var(--mem); box-shadow: 0 0 0 2px var(--mem) inset; }
+  .mem .meta { color: var(--dim); font-size: 14px; }
+  .tag { display: inline-block; font-size: 13px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
+  .tag.private { color: var(--mem); } .tag.community { color: var(--community); }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; } }
 </style>
 </head>
@@ -50,6 +62,21 @@
       <div class="big"><span id="hdg">000</span>° <span id="zone" style="font-size:20px;font-weight:500;color:var(--zone)"></span></div>
       <div class="hint" id="pos"></div>
       <div class="hint">Click the map to walk there. ← → turn, ↑ ↓ step. Heading is in the map frame (not north).</div>
+    </section>
+
+    <section>
+      <div class="label">Leave a memory here</div>
+      <div class="row">
+        <button id="rec">● Record 10 s</button>
+        <button id="recStop" hidden>■ Stop</button>
+        <span id="recState" class="big" style="font-size:24px"></span>
+      </div>
+      <div class="hint">The microphone opens only when you press Record, and closes after 10 s. Saved as private.</div>
+    </section>
+
+    <section>
+      <div class="label">Memories you can hear (<span id="memCount">0</span>)</div>
+      <div id="memList"></div>
     </section>
   </aside>
 </main>

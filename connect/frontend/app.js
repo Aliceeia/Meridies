@@ -106,12 +106,14 @@ function renderWalker() {
 // ---------- movement ----------
 const SPEED = 1.4; // m/s, walking pace
 map.addEventListener("click", (e) => {
+  if (typeof rec !== "undefined" && rec.mr) return toast("Recording — stay put");
   const p = svgPoint(e);
   if (!walkable(p.x, p.y)) return toast("Not walkable there");
   state.target = p;
 });
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("button, select, input, textarea")) return;
+  if (typeof rec !== "undefined" && rec.mr) return;
   const w = state.walker;
   if (e.key === "ArrowLeft") w.heading = norm360(w.heading - 15);
   else if (e.key === "ArrowRight") w.heading = norm360(w.heading + 15);
@@ -140,6 +142,152 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 
+// ---------- audio core: ONE AudioContext, created on the first user gesture ----------
+const FADE = 0.008; // 8 ms fades on every start/stop
+const audio = {
+  _ctx: null,
+  ctx() {
+    if (!this._ctx) {
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this._ctx.createGain();
+      this.master.connect(this._ctx.destination);
+    }
+    if (this._ctx.state === "suspended") this._ctx.resume();
+    return this._ctx;
+  },
+  // short sine tone with fades; dest defaults to master
+  tone(freq, dur, gain = 0.2, when = 0, dest = null) {
+    const c = this.ctx(), t0 = c.currentTime + when;
+    const o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain, t0 + FADE);
+    g.gain.setValueAtTime(gain, t0 + dur - FADE);
+    g.gain.linearRampToValueAtTime(0, t0 + dur);
+    o.connect(g).connect(dest || this.master);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  },
+};
+
+// ---------- memories ----------
+state.user = "user-a";
+state.memories = [];
+const memById = (id) => state.memories.find((m) => m.id === id);
+
+async function loadMemories() {
+  const q = new URLSearchParams({ viewer: state.user, building_id: state.plan.building.id });
+  state.memories = await (await fetch(`/api/memories?${q}`)).json();
+  renderMemories();
+}
+
+function renderMemories() {
+  layers.anchors.replaceChildren();
+  state.memories.forEach((m, i) => {
+    const g = svgEl("g", { transform: `translate(${m.position.x},${-m.position.y})` }, layers.anchors);
+    const col = m.visibility === "community" ? "var(--community)" : "var(--mem)";
+    svgEl("circle", { r: 4, fill: "none", stroke: col, "stroke-width": 0.08, "stroke-dasharray": "0.3 0.3", opacity: 0.7 }, g);
+    svgEl("circle", { r: 0.75, fill: col, stroke: "#000", "stroke-width": 0.12 }, g);
+    const t = svgEl("text", { y: 0.42, fill: "#000", "font-size": 1.1, "font-weight": 700, "text-anchor": "middle" }, g);
+    t.textContent = i + 1;
+  });
+  $("memCount").textContent = state.memories.length;
+  const list = $("memList");
+  list.replaceChildren();
+  state.memories.forEach((m, i) => {
+    const d = document.createElement("div");
+    d.className = "mem";
+    d.id = `mem-${m.id}`;
+    const when = new Date(m.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+    d.innerHTML = `<div><b>#${i + 1}</b> <span class="tag ${m.visibility}">${m.visibility}</span>
+      <span class="meta">by ${m.author_id === state.user ? "you" : m.author_id} · ${when}</span></div>
+      <div class="meta dist"></div><div class="desc"></div><div class="row actions"></div>`;
+    list.appendChild(d);
+  });
+  for (const fn of memHooks) fn();
+  renderWalker();
+}
+const memHooks = []; // later steps decorate each memory card
+
+// ---------- record ----------
+const REC_SECONDS = 10;
+const rec = { mr: null, stream: null, timer: null, anchor: null };
+
+$("rec").addEventListener("click", startRecording);
+$("recStop").addEventListener("click", () => rec.mr && rec.mr.state === "recording" && rec.mr.stop());
+
+async function startRecording() {
+  if (rec.mr) return;
+  audio.ctx(); // first gesture creates the AudioContext
+  const w = state.walker;
+  // Anchor = where the walker stands at the moment of the press. z: approx. speaking height above ground (m).
+  rec.anchor = { x: +w.x.toFixed(2), y: +w.y.toFixed(2), z: 1.5 };
+  try {
+    rec.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true }, // AEC keeps our own cue tones out of the take
+    });
+  } catch (e) {
+    rec.anchor = null;
+    return toast(`Microphone not available: ${e.name}`, 3000);
+  }
+  const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  const mr = (rec.mr = new MediaRecorder(rec.stream, mime ? { mimeType: mime } : {}));
+  const chunks = [];
+  mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  mr.onstop = () => finishRecording(new Blob(chunks, { type: mr.mimeType || "audio/webm" }));
+
+  // start cue: two rising tones, then record
+  audio.tone(660, 0.12, 0.25); audio.tone(880, 0.12, 0.25, 0.15);
+  setTimeout(() => {
+    if (rec.mr !== mr) return;
+    mr.start();
+    document.body.classList.add("recording");
+    $("recStop").hidden = false;
+    state.target = null;
+    showRecMarker(true);
+    let left = REC_SECONDS;
+    const show = () => ($("recState").innerHTML = `<span class="pulse">●</span> REC ${left}s`);
+    show();
+    rec.timer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) { if (mr.state === "recording") mr.stop(); return; }
+      audio.tone(1000, 0.04, 0.05); // quiet per-second blip: recording is in progress
+      show();
+    }, 1000);
+  }, 350);
+}
+
+async function finishRecording(blob) {
+  clearInterval(rec.timer);
+  rec.stream.getTracks().forEach((t) => t.stop()); // mic closed
+  document.body.classList.remove("recording");
+  $("recStop").hidden = true;
+  showRecMarker(false);
+  audio.tone(880, 0.12, 0.25); audio.tone(660, 0.12, 0.25, 0.15); // end cue: falling
+  $("recState").textContent = "Saving…";
+  const a = rec.anchor;
+  rec.mr = null; rec.stream = null; rec.anchor = null;
+  try {
+    const q = new URLSearchParams({ ...a, building_id: state.plan.building.id, author_id: state.user });
+    const r = await fetch(`/api/memories?${q}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+    if (!r.ok) throw new Error((await r.json()).error);
+    $("recState").textContent = "Saved ✓";
+    await loadMemories();
+  } catch (e) {
+    $("recState").textContent = "";
+    toast(`Save failed: ${e.message}`, 4000);
+  }
+  setTimeout(() => ($("recState").textContent = ""), 2500);
+}
+
+function showRecMarker(on) {
+  if (showRecMarker.el) { showRecMarker.el.remove(); showRecMarker.el = null; }
+  if (!on) return;
+  const g = svgEl("g", { transform: `translate(${rec.anchor.x},${-rec.anchor.y})`, class: "pulse" }, map);
+  svgEl("circle", { r: 1.6, fill: "none", stroke: "var(--rec)", "stroke-width": 0.3 }, g);
+  svgEl("circle", { r: 0.6, fill: "var(--rec)" }, g);
+  showRecMarker.el = g;
+}
+
 // ---------- boot ----------
 async function boot() {
   state.plan = await (await fetch("/api/floorplan")).json();
@@ -150,6 +298,7 @@ async function boot() {
   const z = state.plan.zones[0];
   Object.assign(state.walker, { x: z.center[0], y: z.center[1], heading: 0 });
   renderWalker();
+  await loadMemories();
   requestAnimationFrame(tick);
 }
 boot();
