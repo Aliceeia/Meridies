@@ -70,8 +70,14 @@ def can_see(meta, viewer):
     return meta["author_id"] == viewer or meta["visibility"] == "community"
 
 
+COMPASS_RE = re.compile(r"\b(north|south|east|west)(ern|ward|-?east|-?west)?\b", re.I)
+
+
 def public(meta):
     out = {k: v for k, v in meta.items() if k != "audio_file"}
+    d = out.get("description")
+    if d and COMPASS_RE.search(d.get("text", "")):
+        out["description"] = None   # written before descriptions became body-relative: ask again rather than say "south"
     out["audio"] = f"/api/memories/{meta['id']}/audio"
     return out
 

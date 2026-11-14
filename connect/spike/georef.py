@@ -132,15 +132,8 @@ def main():
                         score=round(s_best, 3), runner_up_score=round(runner[0][0], 3),
                         method="splat top-down vs Vexcel ortho, edge NCC over rotation x translation",
                         convention="east,north = R_ccw(rotation_deg) @ [x,y]; compass heading = map heading - rotation_deg")
-    # rename zones by compass direction from the house now that we know where north is
-    th = math.radians(theta)
-    compass = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
-    for z in fp["zones"]:
-        x, y = z["center"]
-        e, n = math.cos(th) * x - math.sin(th) * y, math.sin(th) * x + math.cos(th) * y
-        letter = z["id"][-1]
-        z["name"] = f"Yard {letter}, {compass[int(((math.degrees(math.atan2(e, n)) % 360) + 22.5) // 45) % 8]} of house"
-        print("  ", z["name"])
+    # Zone names stay landmark-based ("Front yard, under the big tree"): never compass points, which
+    # blind users don't orient by. They are hand-named in floorplan.json from the aerial.
     (DATA / "floorplan.json").write_text(json.dumps(fp, indent=1))
     print("merged georef into floorplan.json")
 

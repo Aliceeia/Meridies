@@ -628,17 +628,9 @@ memHooks.push(() => {
   }
 });
 
-// compass heading once the map is georeferenced against Vexcel
-onWalkerChange(() => {
-  const g = state.plan.georef;
-  if (!g) return;
-  const c = norm360(state.walker.heading - g.rotation_deg);
-  const names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  $("compass").textContent = `${names[Math.round(c / 45) % 8]} (${String(Math.round(c)).padStart(3, "0")}°)`;
-});
+// No compass anywhere: blind users orient by their body (ahead / left / right / behind), not by north.
 
 // ---------- first-person view (interior) ----------
-const COMPASS8 = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
 let viewKey = null;
 onWalkerChange(() => {
   updateSweeps();
@@ -649,13 +641,11 @@ onWalkerChange(() => {
   viewKey = key;
   const img = $("viewImg"), s = sweepAt(w.sweep);
   const snapped = norm360(-k * 90);
-  const g = state.plan.georef;
-  const facing = g ? COMPASS8[Math.round(norm360(snapped - g.rotation_deg) / 45) % 8] : `${snapped}°`;
   img.classList.add("loading");
   img.onload = () => img.classList.remove("loading");
   img.onerror = () => { img.classList.remove("loading"); toast("View not available"); };
   img.src = `/api/view?building=${state.plan.building.id}&sweep=${w.sweep}&heading=${snapped}`;
-  $("viewCap").textContent = `${s ? s.room : ""} · facing ${facing}`;
+  $("viewCap").textContent = s ? s.room : "";
 });
 
 // ---------- buildings ----------

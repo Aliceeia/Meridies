@@ -55,11 +55,6 @@ def to_latlon(fp, x, y):
     return g["lat0"] + n / M_PER_DEG, g["lon0"] + e / (M_PER_DEG * math.cos(math.radians(g["lat0"])))
 
 
-def compass(fp, heading_deg: float) -> str:
-    c = (heading_deg - fp["georef"]["rotation_deg"]) % 360
-    return ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][int((c + 22.5) // 45) % 8]
-
-
 def aerial_crop(lat, lon, half=AERIAL_HALF, px=640) -> bytes:
     dlat, dlon = half / M_PER_DEG, half / (M_PER_DEG * math.cos(math.radians(lat)))
     w, e, s, n = lon - dlon, lon + dlon, lat - dlat, lat + dlat
@@ -193,9 +188,9 @@ def describe(m: dict, mem_dir: Path) -> dict:
         prompt, extra = PROMPT_INTERIOR, dict(sweep=sweep)
     else:
         images = [
-            ("aerial", "Vexcel aerial", f"Image 1: aerial orthophoto (Vexcel), north up, {2 * AERIAL_HALF:.0f} m across; "
+            ("aerial", "From above", f"Image 1: aerial photo, {2 * AERIAL_HALF:.0f} m across; "
              "the person is at the centre.", cached("aerial", lambda: aerial_crop(lat, lon))),
-            ("splat", "Drone scan, top-down", f"Image 2: top-down render of a drone 3D scan of the same spot, north up, "
+            ("splat", "Drone scan, from above", f"Image 2: top-down render of a drone 3D scan of the same spot, "
              f"{2 * SPLAT_HALF:.0f} m across; the person is at the centre.", cached("splat", lambda: splat_crop(fp, x, y))),
         ]
         prompt, extra = PROMPT_YARD, {}

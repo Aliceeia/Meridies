@@ -91,7 +91,6 @@ with sync_playwright() as pw:
 
     if STEP in ("4", "all"):
         m = page.evaluate("state.memories[0]")
-        print("compass:", page.inner_text("#compass"))
         r = page.request.post(f"{URL}api/memories/{m['id']}/describe", data={"viewer": "user-a"}, timeout=180_000)
         body = r.json()
         print("describe:", r.status, body.get("error") or body["description"]["text"])
