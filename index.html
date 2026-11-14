@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Meridies — The world beyond sight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400;1,500&family=Hanken+Grotesk:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="gate">
+<canvas id="gl" aria-hidden="true"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<p id="question">What if you could see through sound?</p>
+<img id="logo" alt="Meridies" draggable="false">
+
+<div id="topbar">
+  <div id="logoSlot"></div>
+  <div class="ctrls">
+    <button id="btnSound" class="ctrl" type="button" data-on="false">
+      <svg class="ic-on" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h2.5L8 3v10L4.5 10H2z" fill="currentColor"/><path d="M10.6 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.6a6.2 6.2 0 0 1 0 8.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <svg class="ic-off" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h2.5L8 3v10L4.5 10H2z" fill="currentColor"/><path d="M10.5 6l4 4M14.5 6l-4 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <span class="lbl">Sound off</span>
+    </button>
+    <button id="btnReplay" class="ctrl" type="button">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M3 2.3v3.2h3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="lbl">Replay intro</span>
+    </button>
+  </div>
+</div>
+
+<div id="mems"></div>
+
+<div id="caption" role="status" aria-live="polite">
+  <p id="capMeta" class="cap-meta"></p>
+  <p id="capText" class="cap-text"></p>
+</div>
+
+<div id="hud">
+  <div class="feats">
+    <div class="feat" id="featA">
+      <svg viewBox="-16 -16 32 32" aria-hidden="true"><circle class="pr" r="14" fill="none" stroke="#d9973e" stroke-width="1"/><g id="hexRot"><circle cx="0" cy="-11" r="2.7" fill="#d9973e"/><circle cx="9.53" cy="-5.5" r="1.7" fill="rgba(239,231,220,.6)"/><circle cx="9.53" cy="5.5" r="1.7" fill="rgba(239,231,220,.6)"/><circle cx="0" cy="11" r="1.7" fill="rgba(239,231,220,.6)"/><circle cx="-9.53" cy="5.5" r="1.7" fill="rgba(239,231,220,.6)"/><circle cx="-9.53" cy="-5.5" r="1.7" fill="rgba(239,231,220,.6)"/></g><circle r="2.2" fill="#efe7dc"/></svg>
+      <div><span class="feat-k">MeriSense</span><span class="feat-f">Spatial audio guidance</span><span class="feat-v">Six directions, every two seconds</span></div>
+    </div>
+    <div class="feat">
+      <svg viewBox="-16 -16 32 32" aria-hidden="true"><circle r="3.4" fill="#d9973e"/><circle r="7.8" fill="none" stroke="rgba(217,151,62,.62)" stroke-width="1"/><circle r="12.6" fill="none" stroke="rgba(217,151,62,.28)" stroke-width="1"/></svg>
+      <div><span class="feat-k">MeriMark</span><span class="feat-f">Spatial audio memory</span><span class="feat-v"><b id="memCount">0</b> of 3 marked places heard</span></div>
+    </div>
+    <div class="feat">
+      <svg viewBox="-16 -16 32 32" aria-hidden="true"><rect x="-12.5" y="-10" width="15" height="15" rx="2.5" fill="none" stroke="rgba(239,231,220,.38)" stroke-width="1.2"/><rect x="-3.5" y="-4" width="15" height="15" rx="2.5" fill="none" stroke="rgba(239,231,220,.75)" stroke-width="1.2"/><circle cx="4" cy="3.5" r="2.8" fill="#d9973e"/></svg>
+      <div><span class="feat-k">MeriVerse</span><span class="feat-f">Digital memory gallery</span><span class="feat-v">Your personal world of memories</span></div>
+    </div>
+    <div class="feat">
+      <svg viewBox="-16 -16 32 32" aria-hidden="true"><circle r="10.5" fill="none" stroke="rgba(217,151,62,.35)" stroke-width="1"/><circle cx="0" cy="-10.5" r="2.3" fill="#efe7dc"/><circle cx="10" cy="-3.2" r="2.3" fill="#efe7dc"/><circle cx="6.2" cy="8.5" r="2.3" fill="#efe7dc"/><circle cx="-6.2" cy="8.5" r="2.3" fill="#efe7dc"/><circle cx="-10" cy="-3.2" r="2.3" fill="#efe7dc"/><circle r="3.2" fill="#d9973e"/></svg>
+      <div><span class="feat-k">MeriCircle</span><span class="feat-f">Memory sharing</span><span class="feat-v">Shared with the people you trust</span></div>
+    </div>
+  </div>
+  <p class="hint" id="hint"></p>
+</div>
+
+<button id="skip" class="text-btn" type="button">Skip intro</button>
+
+<div id="gate">
+  <button id="enter" type="button" aria-label="Begin with sound"></button>
+  <div class="gate-inner">
+    <span class="gate-dot"></span>
+    <p class="gate-line">Put on headphones, then click anywhere to begin.</p>
+    <button id="enterQuiet" class="text-btn" type="button">Enter without sound</button>
+  </div>
+</div>
+
+<div id="nogl" hidden><p>This experience needs WebGL, which this browser has turned off.</p></div>
+
+<script src="app.js"></script>
+</body>
+</html>
