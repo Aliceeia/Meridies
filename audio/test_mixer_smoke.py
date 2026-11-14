@@ -40,7 +40,7 @@ def main():
     bank = SoundBank()
     mixer = Mixer(bank)
     sr = mixer.sr
-    duration_s = 6.0
+    duration_s = 7.5  # margin after the t=5.0 silence transition for a long in-flight note to finish
     n_blocks = int(duration_s * sr / BLOCK)
 
     out_chunks = []
@@ -58,7 +58,7 @@ def main():
     peak = np.max(np.abs(audio))
     assert peak <= 1.0, f"Clipping! peak={peak}"
 
-    tail = audio[int(5.2 * sr):]
+    tail = audio[int(6.5 * sr):]  # 1.5s past the silence transition — covers the longest note (~0.65s) plus stagger
     tail_rms = np.sqrt(np.mean(tail ** 2))
     active_rms = np.sqrt(np.mean(audio[int(3.0 * sr):int(5.0 * sr)] ** 2))
 
