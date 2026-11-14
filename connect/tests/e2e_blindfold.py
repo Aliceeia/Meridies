@@ -14,7 +14,7 @@ with sync_playwright() as pw:
     page.add_init_script("""window.__spoken = []; window.__tones = 0;
       const S = window.speechSynthesis; const orig = S.speak.bind(S);
       S.speak = (u) => { window.__spoken.push(u.text); return orig(u); };""")
-    page.goto("http://localhost:8765/?building=zvKHR9DHNjJ")
+    page.goto("http://localhost:8765/walk?building=zvKHR9DHNjJ")
     page.wait_for_function("() => state.ready === true")
     page.evaluate("() => { const t = audio.tone.bind(audio); audio.tone = (...a) => { window.__tones++; return t(...a); }; }")
     vis = page.evaluate("[...document.querySelectorAll('#memList .mem')].filter(c => getComputedStyle(c).display !== 'none').length")

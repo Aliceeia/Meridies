@@ -9,7 +9,7 @@ with sync_playwright() as pw:
     page = b.new_page(viewport={"width": 1500, "height": 950})
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
-    page.goto("http://localhost:8765/?building=zvKHR9DHNjJ")
+    page.goto("http://localhost:8765/walk?building=zvKHR9DHNjJ")
     page.wait_for_function("() => state.ready === true")
     page.click("h2")
     # walk next to the nearest memory: the start sweep is 4; the test memories sit at sweep 0 (a neighbour)

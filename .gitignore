@@ -11,3 +11,4 @@ connect/data/memories/
 .pytest_cache/
 .claude/settings.local.json
 connect/data/family_links.json
+connect/tests/out/

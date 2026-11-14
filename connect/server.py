@@ -317,8 +317,12 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         parts = [p for p in u.path.split("/") if p]
-        if not parts:
-            return self.file(FRONT / "index.html")
+        if not parts or (len(parts) == 2 and parts[0] == "f"):     # gallery; /f/<token> = family view
+            return self.file(FRONT / "gallery.html", "text/html; charset=utf-8")
+        if parts == ["walk"]:                                       # the 3D walk ("Take me there")
+            return self.file(FRONT / "index.html", "text/html; charset=utf-8")
+        if parts == ["live"]:                                       # the hat: realtime, works offline
+            return self.file(FRONT / "live.html", "text/html; charset=utf-8")
         if parts[0] == "data" and len(parts) == 2 and parts[1] in PUBLIC_DATA:
             return self.file(DATA / parts[1])
         if parts == ["api", "floorplan"]:

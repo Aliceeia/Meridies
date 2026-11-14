@@ -154,6 +154,7 @@
   </section>
 
   <aside>
+    <a href="/" id="toGallery" class="where" style="text-decoration:none">← Gallery <span class="key">G</span></a>
     <div class="where" id="whereLine">Loading the place…</div>
 
     <section id="nearby" hidden aria-live="polite">
@@ -193,7 +194,6 @@
         <div><b id="bname"></b> <span id="baddr"></span></div>
         <label class="row">Building <select id="building"></select></label>
         <label class="row">Listening as <select id="user"><option value="user-a">User A</option><option value="user-b">User B</option></select></label>
-        <label class="row"><input type="checkbox" id="hat"> Hat is warning (memory audio muted) — <code>setHatWarning()</code></label>
         <div>heading <span id="hdg">000</span>° · <span id="zone"></span> · <span id="pos"></span> · <span id="memCount">0</span> memories</div>
         <div id="debugMap"></div>
         <figure id="view" hidden><img id="viewImg" alt="Pre-rendered view"><figcaption id="viewCap"></figcaption></figure>
@@ -225,5 +225,6 @@
 <script src="after_record.js"></script>
 <script src="after_record_ui.js"></script>
 <script src="voice.js"></script>
+<script src="arrive.js"></script>
 </body>
 </html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridies Gallery</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23f2c879'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #14110f; --panel: #1c1815; --card: #221d19; --line: #3a322b; --text: #f4ede4; --dim: #b3a596; --faint: #7d7064;
+    --glow: #f2c879; --family: #f0a6a0; --shared: #9fd8b4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.45 ui-rounded, "Segoe UI", system-ui, sans-serif; }
+  a { color: inherit; }
+  button, select { font: inherit; font-size: 16px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: #2a241f; color: var(--text); cursor: pointer; }
+  button:hover:not(:disabled), select:hover { border-color: var(--dim); }
+  button:focus-visible, a:focus-visible, select:focus-visible { outline: 3px solid var(--glow); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 18px 28px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: rgba(20,17,15,.92); backdrop-filter: blur(8px); z-index: 10; }
+  header h1 { font-size: 22px; margin: 0; font-weight: 700; letter-spacing: .01em; }
+  header h1 span { color: var(--glow); }
+  header .grow { flex: 1; }
+  header .who { color: var(--dim); font-size: 15px; }
+  #authorControls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
+  .pill { display: inline-block; font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 99px; border: 1px solid currentColor; }
+  .pill.family { color: var(--family); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 26px 28px 80px; }
+  .lead { color: var(--dim); margin: 0 0 22px; }
+  .empty { color: var(--dim); padding: 60px 0; text-align: center; }
+
+  /* home: a grid of places */
+  #places { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 22px; }
+  .place { display: block; text-decoration: none; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+    transition: transform .15s, border-color .15s; }
+  .place:hover, .place:focus-visible { transform: translateY(-2px); border-color: rgba(242,200,121,.6); }
+  .place.current { border-color: var(--glow); box-shadow: 0 0 0 3px rgba(242,200,121,.35); }
+  .cover { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; background: #0d0b0a; }
+  .place .body { padding: 14px 16px 16px; }
+  .place .name { font-size: 21px; font-weight: 700; line-height: 1.2; }
+  .place .bld { color: var(--faint); font-size: 14px; margin-top: 2px; }
+  .place .meta { color: var(--dim); font-size: 15px; margin-top: 8px; }
+
+  /* place page: a timeline of memory cards */
+  .back { display: inline-block; margin-bottom: 14px; color: var(--dim); text-decoration: none; }
+  .back:hover { color: var(--text); }
+  #placeHead h2 { font-size: 30px; margin: 0; }
+  #placeHead .bld { color: var(--faint); margin: 2px 0 24px; }
+  #timeline { position: relative; display: flex; flex-direction: column; gap: 22px; padding-left: 26px; }
+  #timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+  .mem { position: relative; display: grid; grid-template-columns: 260px 1fr; gap: 18px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 18px; padding: 14px; }
+  .mem.current { border-color: var(--glow); box-shadow: 0 0 0 3px rgba(242,200,121,.35); }
+  .mem::before { content: ""; position: absolute; left: -25px; top: 22px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--glow); box-shadow: 0 0 0 4px var(--bg); }
+  .mem .cover { border-radius: 12px; aspect-ratio: 4 / 3; }
+  .mem .when { color: var(--dim); font-size: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .mem .line { font-size: 20px; margin: 6px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mem .line.quiet { color: var(--faint); font-style: italic; }
+  .mem .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .play { background: var(--glow); color: #241a0c; border: 0; font-weight: 700; }
+  .showtext { background: none; border: 0; padding: 6px 0; color: var(--faint); font-size: 15px; }
+  .showtext:hover { color: var(--dim); }
+  .text { display: none; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 16px; color: var(--dim); }
+  .mem.open .text { display: block; }
+  .text h4 { margin: 8px 0 2px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .text p { margin: 0 0 8px; color: var(--text); }
+  .badge { font-size: 13px; font-weight: 700; padding: 1px 9px; border-radius: 99px; border: 1px solid currentColor; }
+  .badge.private { color: var(--glow); } .badge.family { color: var(--family); } .badge.community { color: var(--shared); }
+  .badge.pending { color: var(--dim); }
+  .vis { font-size: 14px; padding: 6px 10px; }
+  @media (max-width: 720px) {
+    header, main { padding-left: 16px; padding-right: 16px; }
+    .mem { grid-template-columns: 1fr; }
+  }
+
+  /* listen mode: the screen may be fully dark; everything answers in sound */
+  #listen { position: fixed; inset: 0; z-index: 100; background: #000; color: #5d544d; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end; padding-bottom: 8vh; gap: 10px; text-align: center; cursor: none; }
+  #listen[hidden] { display: none; }
+  #listenLine { font-size: 20px; max-width: 80vw; }
+  #listenKeys { font-size: 14px; color: #3f3833; }
+  #listen.lit { background: #0c0a09; color: var(--dim); }
+  #listen.lit #listenKeys { color: var(--faint); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Meridies <span>Gallery</span></h1>
+  <span id="familyPill" class="pill family" hidden>Family view · read only</span>
+  <span class="grow"></span>
+  <span id="authorControls" hidden>
+    <label class="who">You are <select id="user" aria-label="You are"><option value="user-a">User A</option><option value="user-b">User B</option></select></label>
+    <button id="familyBtn" hidden>Family link</button>
+    <a href="/live" class="who" id="liveLink">Hat (live) →</a>
+  </span>
+  <button id="listenBtn" aria-keyshortcuts="L" hidden>◐ Listen mode <span class="who">L</span></button>
+</header>
+<main>
+  <section id="home" aria-labelledby="homeTitle">
+    <h2 id="homeTitle" class="lead" style="font-size:18px;font-weight:400"></h2>
+    <div id="places" role="list"></div>
+  </section>
+  <section id="place" hidden>
+    <a href="#" class="back" id="backLink">← All places</a>
+    <div id="placeHead"><h2 id="placeName"></h2><div class="bld" id="placeBld"></div></div>
+    <div id="timeline" role="list"></div>
+  </section>
+</main>
+<div id="listen" hidden role="application" aria-roledescription="Listen mode" aria-live="assertive">
+  <div id="listenLine"></div>
+  <div id="listenKeys">← → places · ↑ ↓ memories · Space play · D describe · T take me there · H help · Esc leave</div>
+</div>
+<script src="/gallery.js"></script>
+</body>
+</html>

@@ -432,10 +432,9 @@ state.hatWarning = false;
 // The ONLY link to the hardware half: while the hat warns, memory audio stays silent.
 window.setHatWarning = (on) => {
   state.hatWarning = !!on;
-  $("hat").checked = state.hatWarning;
   if (state.hatWarning) stopVoice();
 };
-$("hat").addEventListener("change", (e) => window.setHatWarning(e.target.checked));
+// (the demo "hat is warning" switch moved to /live; this hook stays for the hat)
 
 const play = { near: null, panner: null, src: null, gain: null, playingId: null, armed: new Set() };
 
