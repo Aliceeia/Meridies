@@ -204,5 +204,34 @@ if (FAMILY) {
   };
 }
 
+// ---------- family link: one read-only link per author; it can be turned off at any time ----------
+if (!FAMILY) {
+  const dlg = $("famDlg");
+  const show = (tok) => {
+    $("famUrlRow").hidden = !tok;
+    $("famUrl").value = tok ? `${location.origin}/f/${tok}` : "";
+    $("famMake").hidden = !!tok;
+    $("famOff").hidden = !tok;
+    const n = G.places.reduce((s, p) => s + p.memories.filter((m) => m.visibility === "family").length, 0);
+    $("famNote").lastChild.textContent = `, and nothing else. They can't change anything, record, or open the 3D walk. ` +
+      `${n === 1 ? "One memory is" : `${n} memories are`} marked Family right now.`;
+  };
+  const famCall = async (body) => (await (await fetch("/api/family-link", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: G.user, ...body }) })).json()).token;
+  $("familyBtn").hidden = false;
+  $("familyBtn").onclick = async () => {
+    show((await (await fetch(`/api/family-link?viewer=${encodeURIComponent(G.user)}`)).json()).token);
+    dlg.showModal();
+  };
+  $("famMake").onclick = async () => show(await famCall({}));
+  $("famOff").onclick = async () => show(await famCall({ revoke: true }));
+  $("famCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText($("famUrl").value); $("famCopy").textContent = "Copied"; }
+    catch (_) { $("famUrl").select(); }
+    setTimeout(() => ($("famCopy").textContent = "Copy"), 1500);
+  };
+  $("famClose").onclick = () => dlg.close();
+}
+
 window.gallery = { G, load, render, playMemory, stopMemory, takeMeThere, visOf, transcriptLine, dateHuman, plural, auth, withAuth };
 load();

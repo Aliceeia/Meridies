@@ -100,11 +100,15 @@ def main():
         page.wait_for_timeout(600)
 
         # ---- family link: only family memories, no controls
-        req = urllib.request.Request(base + "/api/family-link", data=json.dumps({"viewer": "user-a"}).encode(), method="POST",
-                                     headers={"Content-Type": "application/json"})
-        tok = json.loads(urllib.request.urlopen(req).read())["token"]
+        page.click("#familyBtn")
+        page.click("#famMake")
+        page.wait_for_function("document.getElementById('famUrl').value.includes('/f/')")
+        url = page.input_value("#famUrl")
+        print("family link made in the page:", url.split("/f/")[0] + "/f/…", "|", page.inner_text("#famNote")[-40:])
+        page.screenshot(path=str(OUT / "gallery_family_dialog.png"))
+        page.click("#famClose")
         fam = b.new_page(viewport={"width": 1280, "height": 860})
-        fam.goto(f"{base}/f/{tok}")
+        fam.goto(url)
         fam.wait_for_selector(".place")
         total = sum(int(t.split()[0].replace("One", "1")) for t in fam.locator(".place .meta").all_inner_texts())
         print("family places:", fam.locator(".place").count(), "memories:", total)
@@ -115,6 +119,17 @@ def main():
         assert fam.locator("#authorControls").is_hidden()
         assert all("Family" in x for x in fam.locator(".badge").all_inner_texts())
         fam.screenshot(path=str(OUT / "gallery_family.png"))
+        # family listen mode works, minus Take me there
+        fam.keyboard.press("l"); fam.wait_for_timeout(200)
+        assert fam.locator("#listen").is_visible()
+        fam.keyboard.press("Escape")
+        # the author turns the link off: the same URL now shows nothing
+        page.click("#familyBtn"); page.click("#famOff")
+        page.wait_for_function("document.getElementById('famUrl').value === ''")
+        page.click("#famClose")
+        fam.goto(url)
+        fam.wait_for_selector(".empty")
+        print("after turning it off:", fam.inner_text(".empty"))
         fam.close()
 
         # ---- take me there: the 3D walk, a few steps away, facing it; first key chimes it

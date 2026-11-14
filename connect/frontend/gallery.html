@@ -79,6 +79,15 @@
     .mem { grid-template-columns: 1fr; }
   }
 
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 20px; padding: 24px; width: min(560px, 92vw); }
+  dialog::backdrop { background: rgba(10,8,7,.75); }
+  dialog h3 { margin: 0 0 8px; font-size: 22px; }
+  #famUrlRow { display: flex; gap: 8px; margin: 14px 0; }
+  #famUrl { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: #14110f; color: var(--text); }
+  .dlgRow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; }
+
   /* listen mode: the screen may be fully dark; everything answers in sound */
   #listen { position: fixed; inset: 0; z-index: 100; background: #000; color: #5d544d; display: flex; flex-direction: column;
     align-items: center; justify-content: flex-end; padding-bottom: 8vh; gap: 10px; text-align: center; cursor: none; }
@@ -116,6 +125,14 @@
   <div id="listenLine"></div>
   <div id="listenKeys">← → places · ↑ ↓ memories · Space play · D describe · T take me there · H help · Esc leave</div>
 </div>
+<dialog id="famDlg" aria-labelledby="famTitle">
+  <h3 id="famTitle">Family link</h3>
+  <p class="who" id="famNote">Anyone with this link can see and hear the memories you mark <b>Family</b>, and nothing else.
+    They can't change anything, record, or open the 3D walk.</p>
+  <div id="famUrlRow"><input id="famUrl" readonly aria-label="Family link"><button id="famCopy">Copy</button></div>
+  <div class="dlgRow"><button id="famMake">Make a link</button><button id="famOff">Turn off this link</button>
+    <span class="grow"></span><button id="famClose">Done</button></div>
+</dialog>
 <script src="/gallery.js"></script>
 <script src="/listen.js"></script>
 </body>
