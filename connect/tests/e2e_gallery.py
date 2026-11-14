@@ -54,6 +54,7 @@ def seed(tmp: Path):
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="meridies-e2e-"))
     srv.MEM, srv.LINKS, srv.AUTO_PROCESS = tmp, tmp / "links.json", False
+    srv.desc.describe = lambda m, d: dict(text="A test description of the spot.", model="test", images=[])   # no Gemini quota
     picked = seed(tmp)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -160,8 +161,7 @@ def listen(page, base):
     page.keyboard.press("ArrowRight"); page.wait_for_timeout(200)
     print("  →    ->", said())
     assert said().startswith("Place 2 of 3")
-    page.keyboard.press("ArrowLeft"); page.wait_for_timeout(200)
-    page.keyboard.press("ArrowDown"); page.wait_for_timeout(200)
+    page.keyboard.press("ArrowDown"); page.wait_for_timeout(200)       # place 2 holds two memories
     print("  ↓    ->", said())
     assert "Memory 2 of 2" in said()
     page.keyboard.press("Space"); page.wait_for_timeout(1200)
@@ -176,6 +176,15 @@ def listen(page, base):
     page.keyboard.press("ArrowRight"); page.wait_for_timeout(200)
     print("  → at end ->", said())
     assert "last place" in said().lower()
+    # a hat button does what the key does
+    req = urllib.request.Request(base + "/api/hat/button", data=json.dumps({"button": "left"}).encode(), method="POST",
+                                 headers={"Content-Type": "application/json"})
+    print("  hat 'left' delivered to", json.loads(urllib.request.urlopen(req).read())["delivered_to"], "page(s)")
+    page.wait_for_timeout(500)
+    print("  hat ← ->", said())
+    assert said().startswith("Place 2 of 3")
+    page.keyboard.press("x"); page.wait_for_timeout(150)
+    assert said() == "Press H for help."
     page.keyboard.press("Escape"); page.wait_for_timeout(200)
     assert page.locator("#listen").is_hidden()
     page.keyboard.press("l"); page.wait_for_timeout(200)

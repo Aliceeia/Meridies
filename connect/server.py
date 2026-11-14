@@ -261,6 +261,20 @@ def public(meta, viewer=None):
     return out
 
 
+# ---------- hat buttons -> open gallery pages (listen mode). Only the button name travels; nothing is stored. ----------
+import queue  # noqa: E402
+HAT_BUTTONS = {"left", "right", "up", "down", "play", "describe", "there", "help", "listen"}
+HAT_CLIENTS: list[queue.Queue] = []
+HAT_LOCK = threading.Lock()
+
+
+def hat_broadcast(button: str) -> int:
+    with HAT_LOCK:
+        for c in HAT_CLIENTS:
+            c.put(button)
+        return len(HAT_CLIENTS)
+
+
 def gallery(q: dict) -> dict:
     """Places with their memories, computed from what this viewer may see right now.
     Author: all of their own memories. Family link: ONLY the owner's family memories."""
@@ -312,6 +326,30 @@ class Handler(BaseHTTPRequestHandler):
             return self.err(404, "not found")
         self.send(200, path.read_bytes(), ctype or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
 
+    def hat_events(self):
+        """Server-sent events: one line per hat button press, to every open gallery page."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        q: queue.Queue = queue.Queue()
+        with HAT_LOCK:
+            HAT_CLIENTS.append(q)
+        try:
+            self.wfile.write(b": hello\n\n"); self.wfile.flush()
+            while True:
+                try:
+                    b = q.get(timeout=15)
+                    self.wfile.write(f"data: {json.dumps({'button': b})}\n\n".encode())
+                except queue.Empty:
+                    self.wfile.write(b": ping\n\n")
+                self.wfile.flush()
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            with HAT_LOCK:
+                HAT_CLIENTS.remove(q)
+
     # routes
     def do_GET(self):
         u = urlparse(self.path)
@@ -362,6 +400,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, out)
         if parts == ["api", "gallery"]:
             return self.send(200, gallery(q))
+        if parts == ["api", "hat", "events"]:
+            return self.hat_events()
         if parts == ["api", "family-link"]:
             tok = family_link_for(q.get("viewer", ""), create=False) if q.get("viewer") else None
             return self.send(200, {"token": tok, "url": f"/f/{tok}" if tok else None})
@@ -459,6 +499,11 @@ class Handler(BaseHTTPRequestHandler):
                 update(m["id"], lambda m: m.__setitem__("transcript", {"status": "pending"}))
             WORKER.submit(process, m["id"])
             return self.send(202, {"queued": m["id"]})
+        if parts == ["api", "hat", "button"]:
+            req = json.loads(self.body() or b"{}")
+            if req.get("button") not in HAT_BUTTONS:
+                return self.err(400, f"button must be one of {sorted(HAT_BUTTONS)}")
+            return self.send(200, {"delivered_to": hat_broadcast(req["button"])})
         if parts == ["api", "family-link"]:
             req = json.loads(self.body() or b"{}")
             viewer = req.get("viewer") or ""
