@@ -288,6 +288,139 @@ function showRecMarker(on) {
   showRecMarker.el = g;
 }
 
+// ---------- proximity playback with direction ----------
+const NEAR_M = 4, REARM_M = 6;
+state.hatWarning = false;
+// The ONLY link to the hardware half: while the hat warns, memory audio stays silent.
+window.setHatWarning = (on) => {
+  state.hatWarning = !!on;
+  $("hat").checked = state.hatWarning;
+  if (state.hatWarning) stopVoice();
+};
+$("hat").addEventListener("change", (e) => window.setHatWarning(e.target.checked));
+
+const play = { near: null, panner: null, src: null, gain: null, playingId: null, armed: new Set() };
+
+// Anchor relative to the walker, in the walker's own frame: forward / right, metres.
+function relative(m) {
+  const w = state.walker, h = rad(w.heading);
+  const dx = m.position.x - w.x, dy = m.position.y - w.y;
+  return { fwd: dx * Math.sin(h) + dy * Math.cos(h), right: dx * Math.cos(h) - dy * Math.sin(h), dist: Math.hypot(dx, dy) };
+}
+function describeDir({ fwd, right, dist }) {
+  const a = norm360(deg(Math.atan2(right, fwd)));
+  const names = ["ahead", "ahead right", "right", "behind right", "behind", "behind left", "left", "ahead left"];
+  return `${names[Math.round(a / 45) % 8]}, ${dist.toFixed(1)} m`;
+}
+function makePanner() {
+  const c = audio.ctx(), p = c.createPanner();
+  p.panningModel = "HRTF";
+  p.distanceModel = "inverse"; p.refDistance = 1; p.rolloffFactor = 0.6;
+  p.connect(audio.master);
+  return p;
+}
+// Web Audio listener sits at the origin facing -Z, +X right, +Y up.
+function placePanner(p, m) {
+  const r = relative(m), t = audio.ctx().currentTime;
+  if (p.positionX) {
+    p.positionX.setTargetAtTime(r.right, t, 0.03);
+    p.positionY.setTargetAtTime(0, t, 0.03);
+    p.positionZ.setTargetAtTime(-r.fwd, t, 0.03);
+  } else p.setPosition(r.right, 0, -r.fwd);
+}
+function chime(m) {
+  if (state.hatWarning) return;
+  const p = makePanner();
+  placePanner(p, m);
+  const c = audio.ctx(), t0 = c.currentTime + 0.02;
+  for (const [f, delay] of [[1318.5, 0], [1760, 0.14]]) {  // soft two-note bell, exponential decay
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0 + delay);
+    g.gain.linearRampToValueAtTime(0.22, t0 + delay + FADE);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + delay + 0.9);
+    o.connect(g).connect(p);
+    o.start(t0 + delay); o.stop(t0 + delay + 0.95);
+  }
+  setTimeout(() => p.disconnect(), 1400);
+}
+
+async function playVoice(m) {
+  if (state.hatWarning) return toast("Hat is warning — memory muted");
+  stopVoice();
+  const c = audio.ctx();
+  const res = await fetch(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
+  if (!res.ok) return toast("Could not load this memory");
+  const buf = await c.decodeAudioData(await res.arrayBuffer());
+  if (state.hatWarning) return;
+  const p = (play.panner = makePanner());
+  placePanner(p, m);
+  const g = (play.gain = c.createGain()), src = (play.src = c.createBufferSource());
+  src.buffer = buf;
+  const t0 = c.currentTime;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(1, t0 + FADE);
+  src.connect(g).connect(p);
+  src.onended = () => { if (play.src === src) { play.src = null; play.playingId = null; updateNearUI(); } };
+  src.start(t0);
+  play.playingId = m.id;
+  updateNearUI();
+}
+function stopVoice() {
+  if (!play.src) return;
+  const c = audio.ctx(), t = c.currentTime, src = play.src, g = play.gain;
+  g.gain.cancelScheduledValues(t);
+  g.gain.setValueAtTime(g.gain.value, t);
+  g.gain.linearRampToValueAtTime(0, t + FADE);
+  src.stop(t + FADE + 0.005);
+  play.src = null; play.playingId = null;
+  updateNearUI();
+}
+
+function updateNearUI() {
+  const m = play.near && memById(play.near);
+  $("nearby").hidden = !m;
+  if (!m) return;
+  const idx = state.memories.indexOf(m) + 1;
+  $("nearWhere").textContent = `#${idx} — ${describeDir(relative(m))}`;
+  $("listen").hidden = play.playingId === m.id;
+  $("stopVoice").hidden = play.playingId !== m.id;
+}
+
+function proximity() {
+  if (!state.memories.length && !play.near) return;
+  // keep the playing voice's panner on its anchor as the walker moves/turns
+  if (play.playingId && play.panner) placePanner(play.panner, memById(play.playingId));
+  for (const m of state.memories) {
+    const r = relative(m);
+    const card = document.querySelector(`#mem-${m.id} .dist`);
+    if (card) card.textContent = describeDir(r);
+    document.getElementById(`mem-${m.id}`)?.classList.toggle("near", r.dist <= NEAR_M);
+    if (r.dist > REARM_M) play.armed.delete(m.id);
+  }
+  if (play.near && relative(memById(play.near) || { position: { x: 1e9, y: 1e9 } }).dist > REARM_M) {
+    if (play.playingId !== play.near) play.near = null;
+  }
+  if (!play.near && !rec.mr) {
+    const cand = state.memories
+      .map((m) => ({ m, r: relative(m) }))
+      .filter(({ m, r }) => r.dist <= NEAR_M && !play.armed.has(m.id))
+      .sort((a, b) => a.r.dist - b.r.dist)[0];
+    if (cand) {
+      play.near = cand.m.id;
+      play.armed.add(cand.m.id);           // one chime per approach; re-arms beyond 6 m
+      if (audio._ctx) chime(cand.m);       // AudioContext only exists after a user gesture
+    }
+  }
+  updateNearUI();
+}
+onWalkerChange(proximity);
+$("listen").addEventListener("click", () => play.near && playVoice(memById(play.near)));
+$("stopVoice").addEventListener("click", stopVoice);
+$("dismiss").addEventListener("click", () => { if (play.playingId === play.near) stopVoice(); play.near = null; updateNearUI(); });
+// first gesture anywhere creates the AudioContext so later chimes can sound
+document.addEventListener("pointerdown", () => audio.ctx(), { once: true });
+
 // ---------- boot ----------
 async function boot() {
   state.plan = await (await fetch("/api/floorplan")).json();

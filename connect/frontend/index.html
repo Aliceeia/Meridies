@@ -64,6 +64,16 @@
       <div class="hint">Click the map to walk there. ← → turn, ↑ ↓ step. Heading is in the map frame (not north).</div>
     </section>
 
+    <section id="nearby" hidden>
+      <div class="label">Memory nearby</div>
+      <div class="big" id="nearWhere" style="font-size:26px;color:var(--mem)"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="listen" style="font-size:22px;padding:14px 22px;border-color:var(--mem)">▶ Listen</button>
+        <button id="stopVoice" hidden>■ Stop</button>
+        <button id="dismiss">Not now</button>
+      </div>
+    </section>
+
     <section>
       <div class="label">Leave a memory here</div>
       <div class="row">
@@ -77,6 +87,13 @@
     <section>
       <div class="label">Memories you can hear (<span id="memCount">0</span>)</div>
       <div id="memList"></div>
+    </section>
+
+    <section>
+      <div class="label">Hardware link</div>
+      <label class="row" style="cursor:pointer"><input type="checkbox" id="hat" style="width:22px;height:22px">
+        Hat is warning (memory audio muted)</label>
+      <div class="hint">The hat sets this via <code>setHatWarning(true|false)</code>. Demo toggle here.</div>
     </section>
   </aside>
 </main>

@@ -56,6 +56,38 @@ with sync_playwright() as pw:
         assert m["visibility"] == "private" and abs(m["position"]["x"] - pos[0]) < 0.01
         page.screenshot(path=str(OUT / "step2_saved.png"))
 
+    if STEP in ("3", "all"):
+        page.mouse.click(5, 5)  # a user gesture -> AudioContext exists
+        m = page.evaluate("state.memories[0]")
+        mx, my = m["position"]["x"], m["position"]["y"]
+        walk_to(page, 17.3, 5.7)                     # Yard A, > 6 m away: re-arm
+        assert page.evaluate("document.getElementById('nearby').hidden"), "prompt showed while far away"
+        walk_to(page, mx + 3.0, my)                  # 3 m to the right of the memory, arriving heading -X (270)
+        near = page.evaluate("play.near")
+        print("near after approach:", near == m["id"], "|", page.inner_text("#nearWhere"))
+        assert near == m["id"] and not page.evaluate("document.getElementById('nearby').hidden")
+        assert page.evaluate("play.playingId") is None, "voice auto-played"
+        page.screenshot(path=str(OUT / "step3_nearby.png"))
+        page.click("#listen")
+        page.wait_for_function("() => play.playingId !== null", timeout=10_000)
+        # face -X (heading 270): the memory, 3 m to our -X side, is straight ahead -> panner z < 0, x ~ 0
+        page.evaluate("state.walker.heading = 270; renderWalker()")
+        time.sleep(0.3)
+        ahead = page.evaluate("[play.panner.positionX.value, play.panner.positionZ.value]")
+        page.keyboard.press("ArrowRight"); page.keyboard.press("ArrowRight"); page.keyboard.press("ArrowRight"); page.keyboard.press("ArrowRight"); page.keyboard.press("ArrowRight"); page.keyboard.press("ArrowRight")  # +90 deg -> heading 0
+        time.sleep(0.3)
+        left = page.evaluate("[play.panner.positionX.value, play.panner.positionZ.value]")
+        print(f"panner facing it: x={ahead[0]:+.2f} z={ahead[1]:+.2f} | after turning right 90: x={left[0]:+.2f} z={left[1]:+.2f}")
+        assert ahead[1] < -2.5 and abs(ahead[0]) < 0.5, "should be ahead"
+        assert left[0] < -2.5 and abs(left[1]) < 0.5, "should be on the left"
+        page.screenshot(path=str(OUT / "step3_playing.png"))
+        page.check("#hat")
+        assert page.evaluate("play.playingId") is None, "hat warning did not stop memory audio"
+        page.click("#listen")
+        assert page.evaluate("play.playingId") is None, "played while hat warning"
+        page.uncheck("#hat")
+        print("hat gate: ok")
+
     b.close()
 
 print("page errors:", errors or "none")
