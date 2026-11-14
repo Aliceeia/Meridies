@@ -35,103 +35,12 @@ ID_RE = re.compile(r"^[0-9a-f]{32}$")
 PUBLIC_DATA = {"floorplan.json", "splat_topdown.jpg"}
 
 
-# ---------- AI description (step 4) ----------
-KIT = HERE.parent.parent  # sponsor kit folder holding the git-ignored .env
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-VEXCEL = "https://api.vexcelgroup.com/v2"
-M_PER_DEG = 111_320.0
-PROMPT = ("This is imagery of a location a blind person is standing at. Describe it in two sentences, "
-          "focusing on what they could hear, touch, or walk to. Do not describe colours or anything purely visual.")
-AERIAL_HALF, SPLAT_HALF = 15.0, 12.0
+# ---------- AI description: see connect/backend/describe.py ----------
+import sys  # noqa: E402
+sys.path.insert(0, str(HERE.parent))
+from connect.backend import describe as desc  # noqa: E402
 
-
-def secret(name):
-    v = os.environ.get(name)
-    env = KIT / ".env"
-    if not v and env.exists():
-        for line in env.read_text().splitlines():
-            k, _, val = line.partition("=")
-            if k.strip() == name:
-                v = val.strip().strip('"').strip("'")
-    return v
-
-
-def floorplan():
-    return json.loads((DATA / "floorplan.json").read_text())
-
-
-def to_latlon(fp, x, y):
-    g = fp["georef"]
-    th = math.radians(g["rotation_deg"])
-    e, n = math.cos(th) * x - math.sin(th) * y, math.sin(th) * x + math.cos(th) * y
-    return g["lat0"] + n / M_PER_DEG, g["lon0"] + e / (M_PER_DEG * math.cos(math.radians(g["lat0"])))
-
-
-def aerial_crop(lat, lon, half=AERIAL_HALF, px=640) -> bytes:
-    dlat, dlon = half / M_PER_DEG, half / (M_PER_DEG * math.cos(math.radians(lat)))
-    w, e, s, n = lon - dlon, lon + dlon, lat - dlat, lat + dlat
-    req = urllib.request.Request(f"{VEXCEL}/ortho/extract", method="POST",
-        headers={"X-API-KEY": secret("VEXCEL_API_KEY") or "", "Content-Type": "application/json"},
-        data=json.dumps({"wkt": f"POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))", "srid": 4326,
-                         "layer": "urban,urban-r,wide-area,urban-g", "crop": "bounding_box", "image-format": "jpeg",
-                         "destination-dimensions": f"{px},{px}", "attribution": "false"}).encode())
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return r.read()
-
-
-def splat_crop(fp, x, y, half=SPLAT_HALF) -> bytes:
-    """North-up crop of the splat top-down render centred on (x, y)."""
-    from PIL import Image
-    img = Image.open(DATA / fp["backdrop"]["image"])
-    x0, x1, y0, y1 = fp["backdrop"]["extent"]
-    ppm = img.width / (x1 - x0)
-    cx, cy = (x - x0) * ppm, (y1 - y) * ppm
-    r = half * 1.5 * ppm
-    big = img.crop((int(cx - r), int(cy - r), int(cx + r), int(cy + r)))
-    big = big.rotate(fp["georef"]["rotation_deg"], resample=Image.BICUBIC)  # image-up (map +Y) -> north-up
-    k = (big.width - 2 * half * ppm) / 2
-    out = io.BytesIO()
-    big.crop((int(k), int(k), int(big.width - k), int(big.height - k))).save(out, "JPEG", quality=85)
-    return out.getvalue()
-
-
-def gemini(images: list[tuple[str, bytes]]) -> str:
-    key = secret("GEMINI_API_KEY") or secret("GOOGLE_API_KEY")
-    if not key:
-        raise LookupError("GEMINI_API_KEY is not set (add it to the .env next to models_index.csv)")
-    parts = [{"text": PROMPT}]
-    for caption, data in images:
-        parts += [{"text": caption}, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(data).decode()}}]
-    req = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent", method="POST",
-        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-        data=json.dumps({"contents": [{"role": "user", "parts": parts}]}).encode())
-    with urllib.request.urlopen(req, timeout=120) as r:
-        body = json.loads(r.read())
-    return " ".join(p.get("text", "") for p in body["candidates"][0]["content"]["parts"]).strip()
-
-
-def describe(m) -> dict:
-    fp = floorplan()
-    if "georef" not in fp:
-        raise LookupError("floorplan.json has no georef; run connect/spike/georef.py")
-    x, y = m["position"]["x"], m["position"]["y"]
-    lat, lon = to_latlon(fp, x, y)
-    aerial = MEM / f"{m['id']}_aerial.jpg"
-    if not aerial.exists():
-        aerial.write_bytes(aerial_crop(lat, lon))
-    splat = MEM / f"{m['id']}_splat.jpg"
-    if not splat.exists():
-        splat.write_bytes(splat_crop(fp, x, y))
-    text = gemini([
-        (f"Image 1: aerial orthophoto (Vexcel), north up, {2 * AERIAL_HALF:.0f} m across; the person is at the centre.",
-         aerial.read_bytes()),
-        (f"Image 2: top-down render of a drone 3D scan of the same spot, north up, {2 * SPLAT_HALF:.0f} m across; "
-         f"the person is at the centre.", splat.read_bytes()),
-    ])
-    return dict(text=text, model=GEMINI_MODEL, lat=round(lat, 7), lon=round(lon, 7),
-                created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                sources=["vexcel ortho", "drone splat render"])
+DEFAULT_BUILDING = "1PVeAYmPNJz"  # the yard; PART 5 switches the default to the interior
 
 
 def load(mid):
@@ -192,9 +101,18 @@ class Handler(BaseHTTPRequestHandler):
         if parts[0] == "data" and len(parts) == 2 and parts[1] in PUBLIC_DATA:
             return self.file(DATA / parts[1])
         if parts == ["api", "floorplan"]:
-            fp = json.loads((DATA / "floorplan.json").read_text())
+            bid = q.get("building") or DEFAULT_BUILDING
+            if bid not in desc.BUILDINGS:
+                return self.err(404, f"unknown building {bid}")
+            fp = desc.load_plan(bid)
             fp.pop("meta", None)
             return self.send(200, fp)
+        if parts == ["api", "buildings"]:
+            out = []
+            for bid in desc.BUILDINGS:
+                fp = desc.load_plan(bid)
+                out.append(dict(id=bid, name=fp["building"]["name"], kind=fp["kind"], default=bid == DEFAULT_BUILDING))
+            return self.send(200, out)
         if parts == ["api", "memories"]:
             viewer, bid = q.get("viewer", ""), q.get("building_id")
             out = []
@@ -212,7 +130,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.err(403, "private memory")
             return self.file(MEM / m["audio_file"], m["audio_type"])
         if (len(parts) == 5 and parts[:2] == ["api", "memories"] and parts[3] == "image"
-                and parts[4] in ("aerial", "splat") and ID_RE.match(parts[2])):
+                and parts[4] in ("aerial", "splat", "firstperson", "topdown") and ID_RE.match(parts[2])):
             try:
                 m = load(parts[2])
             except FileNotFoundError:
@@ -247,6 +165,13 @@ class Handler(BaseHTTPRequestHandler):
             meta = dict(id=mid, position=pos, building_id=bid, author_id=author,
                         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                         visibility="private", description=None, audio_type=ctype, audio_file=fname)
+            try:  # optional: where the person faced, and which sweep they stood at (interior)
+                if "heading_deg" in q:
+                    meta["heading_deg"] = round(float(q["heading_deg"]) % 360, 1)
+                if q.get("sweep", "") != "":
+                    meta["sweep"] = int(q["sweep"])
+            except ValueError as e:
+                return self.err(400, f"bad request: {e}")
             save(meta)
             return self.send(201, public(meta))
         if len(parts) == 4 and parts[:2] == ["api", "memories"] and parts[3] == "describe" and ID_RE.match(parts[2]):
@@ -257,12 +182,12 @@ class Handler(BaseHTTPRequestHandler):
             if not can_see(m, req.get("viewer", "")):
                 return self.err(403, "private memory")
             try:
-                m["description"] = describe(m)
+                m["description"] = desc.describe(m, MEM)
             except LookupError as e:
                 return self.err(503, str(e))
             except urllib.error.HTTPError as e:
                 return self.err(502, f"{e.url.split('?')[0]} answered {e.code}: {e.read()[:200].decode(errors='replace')}")
-            except (urllib.error.URLError, KeyError, IndexError) as e:
+            except (urllib.error.URLError, KeyError, IndexError, TimeoutError) as e:
                 return self.err(502, f"description failed: {e!r}")
             save(m)
             return self.send(200, public(m))

@@ -149,18 +149,35 @@ def main():
                 for e in edges.values() for o in e.get("openings") or []]
 
     geo = (cap.get("GetModelViewPrefetch") or {}).get("data", {}).get("model", {}).get("geocoordinates")
+    georef = None
+    if geo:
+        # Checked by eye against a Vexcel ortho (spike/interior_georef_check.py): east,north = R(theta) p + t,
+        # theta = rotation about +Z from the quaternion. Rotation matches the roof; translation is GPS-grade (~2-3 m).
+        q, t = geo["rotation"], geo["translation"]
+        theta = math.degrees(2 * math.atan2(q["z"], q["w"]))
+        lat0 = geo["latitude"] + t["y"] / 111_320.0
+        lon0 = geo["longitude"] + t["x"] / (111_320.0 * math.cos(math.radians(geo["latitude"])))
+        georef = dict(lat0=round(lat0, 7), lon0=round(lon0, 7), rotation_deg=round(theta % 360, 2),
+                      method="Matterport showcase geocoordinates (east,north = R(theta) p + t), verified by eye on Vexcel; ~2-3 m offset",
+                      convention="east,north = R_ccw(rotation_deg) @ [x,y]; compass heading = map heading - rotation_deg")
     out = dict(
         building=dict(model_id=MODEL, id=MODEL, name=cap.get("title", MODEL),
                       lat=geo and geo["latitude"], lon=geo and geo["longitude"]),
         sweeps=sweeps, walkable=walkable, hazards=[], rooms=rooms, openings=openings,
         walls=[dict(a=vpos[e["vertices"][0]["id"]], b=vpos[e["vertices"][1]["id"]], type=e["type"],
                     thickness=e.get("thickness")) for e in edges.values()],
-        geocoordinates=geo,
+        geocoordinates=geo, georef=georef,
         meta=dict(source="public showcase page data (MP_PREFETCHED_MODELDATA, GetModelViewPrefetch, GetRoomBounds)",
                   frame="metres, Model API frame (+Z up, measured), floor z=0",
                   showcase_ss="ss = index + 1 (1-based, measured)"),
     )
     DATA.mkdir(parents=True, exist_ok=True)
+    prev = DATA / "interior_floorplan.json"
+    if prev.exists():  # keep hazards produced by interior_hazards.py
+        old = json.loads(prev.read_text())
+        out["hazards"] = old.get("hazards", [])
+        if "hazards" in old.get("meta", {}):
+            out["meta"]["hazards"] = old["meta"]["hazards"]
     (DATA / "interior_floorplan.json").write_text(json.dumps(out, indent=1))
     print(f"wrote {DATA / 'interior_floorplan.json'}: {len(sweeps)} sweeps")
 

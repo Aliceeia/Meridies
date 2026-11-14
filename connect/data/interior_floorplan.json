@@ -2978,9 +2978,24 @@
    "w": 0.6845247827531877
   }
  },
+ "georef": {
+  "lat0": 34.0935508,
+  "lon0": -118.3171186,
+  "rotation_deg": 93.6,
+  "method": "Matterport showcase geocoordinates (east,north = R(theta) p + t), verified by eye on Vexcel; ~2-3 m offset",
+  "convention": "east,north = R_ccw(rotation_deg) @ [x,y]; compass heading = map heading - rotation_deg"
+ },
  "meta": {
   "source": "public showcase page data (MP_PREFETCHED_MODELDATA, GetModelViewPrefetch, GetRoomBounds)",
   "frame": "metres, Model API frame (+Z up, measured), floor z=0",
-  "showcase_ss": "ss = index + 1 (1-based, measured)"
+  "showcase_ss": "ss = index + 1 (1-based, measured)",
+  "hazards": {
+   "method": "Gemini Vision (gemini-3.8-flash) on 4 first-person renders per sweep; detection placed from sweep position + yaw + frame_x (HFOV~100 deg) + estimated distance; trusted only if seen from >=2 sweeps within 1.0 m / 0.3 m",
+   "renders": 156,
+   "answered": 1,
+   "failed": 155,
+   "raw_detections": 0,
+   "rejected_single_sweep": []
+  }
  }
 }

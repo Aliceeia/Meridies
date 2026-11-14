@@ -221,6 +221,7 @@ async function startRecording() {
   const w = state.walker;
   // Anchor = where the walker stands at the moment of the press. z: approx. speaking height above ground (m).
   rec.anchor = { x: +w.x.toFixed(2), y: +w.y.toFixed(2), z: 1.5 };
+  rec.facing = { heading_deg: +w.heading.toFixed(1), ...(w.sweep != null ? { sweep: w.sweep } : {}) };
   try {
     rec.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true }, // AEC keeps our own cue tones out of the take
@@ -265,9 +266,10 @@ async function finishRecording(blob) {
   audio.tone(880, 0.12, 0.25); audio.tone(660, 0.12, 0.25, 0.15); // end cue: falling
   $("recState").textContent = "Saving…";
   const a = rec.anchor;
-  rec.mr = null; rec.stream = null; rec.anchor = null;
+  rec.facingSaved = rec.facing;
+  rec.mr = null; rec.stream = null; rec.anchor = null; rec.facing = null;
   try {
-    const q = new URLSearchParams({ ...a, building_id: state.plan.building.id, author_id: state.user });
+    const q = new URLSearchParams({ ...a, ...rec.facingSaved, building_id: state.plan.building.id, author_id: state.user });
     const r = await fetch(`/api/memories?${q}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
     if (!r.ok) throw new Error((await r.json()).error);
     $("recState").textContent = "Saved ✓";
@@ -439,11 +441,23 @@ memHooks.push(() => {
     const btn = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; actions.appendChild(b); return b; };
     if (m.description) {
       const v = encodeURIComponent(state.user);
-      desc.innerHTML = `<p style="margin:8px 0;font-size:17px"></p>
-        <div class="row"><img alt="Aerial view" src="/api/memories/${m.id}/image/aerial?viewer=${v}" width="120" height="120" style="border-radius:6px">
-        <img alt="Drone scan view" src="/api/memories/${m.id}/image/splat?viewer=${v}" width="120" height="120" style="border-radius:6px"></div>
-        <div class="meta">AI (${m.description.model}) from aerial + drone imagery</div>`;
+      // exactly what the model was given, in order, labelled
+      const imgs = m.description.images || [{ kind: "aerial", label: "Vexcel aerial" }, { kind: "splat", label: "Drone scan, top-down" }];
+      desc.innerHTML = `<p style="margin:8px 0;font-size:17px"></p><div class="row thumbs"></div>
+        <div class="meta">AI (${m.description.model}) · images sent, in order</div>`;
       desc.querySelector("p").textContent = m.description.text;
+      for (const im of imgs) {
+        const fig = document.createElement("figure");
+        fig.style.cssText = "margin:0;width:120px";
+        fig.innerHTML = `<a target="_blank"><img width="120" height="${im.kind === "firstperson" ? 75 : 120}"
+          style="border-radius:6px;object-fit:cover;display:block"></a><figcaption class="meta" style="font-size:12px;line-height:1.2"></figcaption>`;
+        const src = `/api/memories/${m.id}/image/${im.kind}?viewer=${v}`;
+        fig.querySelector("a").href = src;
+        fig.querySelector("img").src = src;
+        fig.querySelector("img").alt = im.label;
+        fig.querySelector("figcaption").textContent = im.label;
+        desc.querySelector(".thumbs").appendChild(fig);
+      }
       btn("🔊 Speak", () => speak(m.description.text));
     }
     const d = btn(m.description ? "↻ Describe again" : "✦ Describe place", async () => {
