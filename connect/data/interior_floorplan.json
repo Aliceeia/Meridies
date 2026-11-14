@@ -1,0 +1,3641 @@
+{
+ "building": {
+  "model_id": "zvKHR9DHNjJ",
+  "id": "zvKHR9DHNjJ",
+  "name": "5836 La Mirada Ave",
+  "public": false,
+  "space_kind": "private_residence",
+  "lat": 34.093491666999995,
+  "lon": -118.3171
+ },
+ "start_sweep": 4,
+ "sweeps": [
+  {
+   "index": 0,
+   "id": "tgx6gn9g8wpqfq57gfammfqka",
+   "label": "0",
+   "floor": 0,
+   "position": {
+    "x": 0.01,
+    "y": -0.018,
+    "z": 0.022
+   },
+   "camera_height_m": 1.501,
+   "neighbours": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    8,
+    9,
+    10,
+    11,
+    13,
+    35,
+    36,
+    37
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 1,
+   "id": "cd4n41i8nsrr88ec8hky2qqka",
+   "label": "1",
+   "floor": 0,
+   "position": {
+    "x": -0.019,
+    "y": 1.546,
+    "z": 0.014
+   },
+   "camera_height_m": 1.498,
+   "neighbours": [
+    0,
+    2,
+    3,
+    4,
+    32,
+    34,
+    35,
+    36
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 2,
+   "id": "b72fp8qgf3esrt5gdrcknfzga",
+   "label": "2",
+   "floor": 0,
+   "position": {
+    "x": -1.28,
+    "y": -1.008,
+    "z": 0.016
+   },
+   "camera_height_m": 1.499,
+   "neighbours": [
+    0,
+    1,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    13,
+    23,
+    24,
+    36,
+    37
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 3,
+   "id": "c18cwe6ee9ccact3mxfw31mhd",
+   "label": "3",
+   "floor": 0,
+   "position": {
+    "x": -0.168,
+    "y": -2.835,
+    "z": 0.034
+   },
+   "camera_height_m": 1.499,
+   "neighbours": [
+    0,
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    24,
+    36,
+    37
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 4,
+   "id": "0x1isyff3bgg9prxdenu4frfd",
+   "label": "4",
+   "floor": 0,
+   "position": {
+    "x": 1.125,
+    "y": -0.113,
+    "z": 0.042
+   },
+   "camera_height_m": 1.488,
+   "neighbours": [
+    0,
+    1,
+    2,
+    3,
+    5,
+    8,
+    9,
+    10,
+    11,
+    13,
+    35,
+    37
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 5,
+   "id": "418rwm658z00s6z1dgik53xhc",
+   "label": "5",
+   "floor": 0,
+   "position": {
+    "x": -2.742,
+    "y": -1.219,
+    "z": 0.015
+   },
+   "camera_height_m": 1.498,
+   "neighbours": [
+    0,
+    2,
+    3,
+    4,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    13,
+    24,
+    37
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 6,
+   "id": "5ef86yc9eazqtcm82ar3irfqa",
+   "label": "6",
+   "floor": 0,
+   "position": {
+    "x": -4.544,
+    "y": -0.319,
+    "z": 0.016
+   },
+   "camera_height_m": 1.494,
+   "neighbours": [
+    2,
+    3,
+    5,
+    7,
+    8,
+    9,
+    10,
+    14,
+    23,
+    24
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 7,
+   "id": "mmbwziwecxb9m8q1asgdq10ed",
+   "label": "7",
+   "floor": 0,
+   "position": {
+    "x": -6.217,
+    "y": -0.219,
+    "z": -0.005
+   },
+   "camera_height_m": 1.495,
+   "neighbours": [
+    2,
+    3,
+    5,
+    6,
+    8,
+    9,
+    10,
+    18,
+    23,
+    24
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 8,
+   "id": "b470c6ztd8733p8xgzs1d64gb",
+   "label": "8",
+   "floor": 0,
+   "position": {
+    "x": -6.264,
+    "y": -2.956,
+    "z": 0.002
+   },
+   "camera_height_m": 1.501,
+   "neighbours": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    37
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 9,
+   "id": "f04my6h0adad7916q2yunyx2a",
+   "label": "9",
+   "floor": 0,
+   "position": {
+    "x": -4.795,
+    "y": -2.945,
+    "z": 0.021
+   },
+   "camera_height_m": 1.498,
+   "neighbours": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    10,
+    11,
+    12,
+    13,
+    37
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 10,
+   "id": "d7uckrxa7aahkfd4ytp2x6qid",
+   "label": "10",
+   "floor": 0,
+   "position": {
+    "x": -3.006,
+    "y": -2.436,
+    "z": 0.022
+   },
+   "camera_height_m": 1.497,
+   "neighbours": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    11,
+    12,
+    13,
+    24,
+    37
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 11,
+   "id": "3bpdnkeinsyafi9kppqntha7b",
+   "label": "11",
+   "floor": 0,
+   "position": {
+    "x": -7.347,
+    "y": -3.34,
+    "z": -0.011
+   },
+   "camera_height_m": 1.501,
+   "neighbours": [
+    0,
+    2,
+    4,
+    5,
+    8,
+    9,
+    10,
+    12,
+    13,
+    14,
+    37
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 12,
+   "id": "8y3xi9p4tz8ryfq274qn58y8a",
+   "label": "12",
+   "floor": 0,
+   "position": {
+    "x": -9.146,
+    "y": -3.305,
+    "z": -0.016
+   },
+   "camera_height_m": 1.489,
+   "neighbours": [
+    8,
+    9,
+    10,
+    11,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    23
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 13,
+   "id": "i2e531d27m54g8xf8fqm0mm6b",
+   "label": "13",
+   "floor": 0,
+   "position": {
+    "x": -9.904,
+    "y": -4.384,
+    "z": -0.019
+   },
+   "camera_height_m": 1.491,
+   "neighbours": [
+    0,
+    2,
+    4,
+    5,
+    8,
+    9,
+    10,
+    11,
+    12,
+    14,
+    15,
+    16,
+    17,
+    23,
+    37
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 14,
+   "id": "n5rwn1zrsks0yspec7aqpxt3b",
+   "label": "14",
+   "floor": 0,
+   "position": {
+    "x": -8.777,
+    "y": -5.204,
+    "z": -0.001
+   },
+   "camera_height_m": 1.49,
+   "neighbours": [
+    6,
+    11,
+    12,
+    13,
+    15,
+    16,
+    17,
+    18,
+    23
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 15,
+   "id": "cbndtx0xss1aefwwwb1cxy2gd",
+   "label": "15",
+   "floor": 0,
+   "position": {
+    "x": -7.444,
+    "y": -4.858,
+    "z": -0.0
+   },
+   "camera_height_m": 1.496,
+   "neighbours": [
+    12,
+    13,
+    14,
+    16,
+    17
+   ],
+   "room": "Dining Room"
+  },
+  {
+   "index": 16,
+   "id": "35bu9kag74cwsq1s3f47fwqrc",
+   "label": "16",
+   "floor": 0,
+   "position": {
+    "x": -6.488,
+    "y": -5.021,
+    "z": -0.035
+   },
+   "camera_height_m": 1.496,
+   "neighbours": [
+    12,
+    13,
+    14,
+    15
+   ],
+   "room": "Room"
+  },
+  {
+   "index": 17,
+   "id": "0kxp6pbbkte98efikuzkwzgxc",
+   "label": "17",
+   "floor": 0,
+   "position": {
+    "x": -9.459,
+    "y": -2.206,
+    "z": -0.02
+   },
+   "camera_height_m": 1.491,
+   "neighbours": [
+    12,
+    13,
+    14,
+    15,
+    18,
+    19,
+    23,
+    25
+   ],
+   "room": "Kitchen"
+  },
+  {
+   "index": 18,
+   "id": "hxzu5nrr8ib8bqqbxprcxeync",
+   "label": "18",
+   "floor": 0,
+   "position": {
+    "x": -9.796,
+    "y": -0.895,
+    "z": -0.026
+   },
+   "camera_height_m": 1.495,
+   "neighbours": [
+    7,
+    12,
+    14,
+    17,
+    19,
+    23,
+    24
+   ],
+   "room": "Kitchen"
+  },
+  {
+   "index": 19,
+   "id": "6ymgeknw94ryhs733kr04m0xd",
+   "label": "19",
+   "floor": 0,
+   "position": {
+    "x": -11.614,
+    "y": -1.591,
+    "z": -0.03
+   },
+   "camera_height_m": 1.49,
+   "neighbours": [
+    17,
+    18,
+    20,
+    21,
+    23,
+    24
+   ],
+   "room": "Kitchen"
+  },
+  {
+   "index": 20,
+   "id": "23bnpf62mg8bgb6ym34iu2myc",
+   "label": "20",
+   "floor": 0,
+   "position": {
+    "x": -11.794,
+    "y": -3.25,
+    "z": -0.035
+   },
+   "camera_height_m": 1.494,
+   "neighbours": [
+    19,
+    21
+   ],
+   "room": "Hallway"
+  },
+  {
+   "index": 21,
+   "id": "y2qdsq85h95gwqcn9ne5khsfc",
+   "label": "21",
+   "floor": 0,
+   "position": {
+    "x": -12.379,
+    "y": -4.474,
+    "z": -0.027
+   },
+   "camera_height_m": 1.494,
+   "neighbours": [
+    19,
+    20,
+    22
+   ],
+   "room": "Bathroom"
+  },
+  {
+   "index": 22,
+   "id": "d279g7xebr6dyraxsf95h6qfa",
+   "label": "22",
+   "floor": 0,
+   "position": {
+    "x": -11.874,
+    "y": -5.135,
+    "z": -0.022
+   },
+   "camera_height_m": 1.497,
+   "neighbours": [
+    21
+   ],
+   "room": "Bathroom"
+  },
+  {
+   "index": 23,
+   "id": "9zsku0i2t4kbd5nmbizt6yh0d",
+   "label": "23",
+   "floor": 0,
+   "position": {
+    "x": -9.046,
+    "y": -0.039,
+    "z": -0.025
+   },
+   "camera_height_m": 1.492,
+   "neighbours": [
+    2,
+    6,
+    7,
+    12,
+    13,
+    14,
+    17,
+    18,
+    19,
+    24
+   ],
+   "room": "Kitchen"
+  },
+  {
+   "index": 24,
+   "id": "0xzu1mktux4h8b9un0xsd8mha",
+   "label": "24",
+   "floor": 0,
+   "position": {
+    "x": -7.617,
+    "y": 0.034,
+    "z": -0.02
+   },
+   "camera_height_m": 1.5,
+   "neighbours": [
+    2,
+    3,
+    5,
+    6,
+    7,
+    10,
+    18,
+    19,
+    23,
+    25,
+    26,
+    27
+   ],
+   "room": "Hallway"
+  },
+  {
+   "index": 25,
+   "id": "tmpywr94i7xrrhushaey6tp6c",
+   "label": "25",
+   "floor": 0,
+   "position": {
+    "x": -7.514,
+    "y": 1.315,
+    "z": -0.013
+   },
+   "camera_height_m": 1.495,
+   "neighbours": [
+    17,
+    24,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    34,
+    35,
+    36
+   ],
+   "room": "Hallway"
+  },
+  {
+   "index": 26,
+   "id": "pqunigw6ucgcm4a1a17myqkma",
+   "label": "26",
+   "floor": 0,
+   "position": {
+    "x": -7.646,
+    "y": 2.678,
+    "z": -0.011
+   },
+   "camera_height_m": 1.496,
+   "neighbours": [
+    24,
+    25,
+    27
+   ],
+   "room": "Bathroom"
+  },
+  {
+   "index": 27,
+   "id": "i8uihtgkec9ryrpg2p6b4gtfd",
+   "label": "27",
+   "floor": 0,
+   "position": {
+    "x": -7.449,
+    "y": 3.88,
+    "z": 0.0
+   },
+   "camera_height_m": 1.496,
+   "neighbours": [
+    24,
+    25,
+    26
+   ],
+   "room": "Bathroom"
+  },
+  {
+   "index": 28,
+   "id": "k3hpf9ccgst5zc3z0nb1p2pxb",
+   "label": "28",
+   "floor": 0,
+   "position": {
+    "x": -9.356,
+    "y": 1.427,
+    "z": -0.029
+   },
+   "camera_height_m": 1.503,
+   "neighbours": [
+    25,
+    29,
+    30,
+    31
+   ],
+   "room": "Bedroom"
+  },
+  {
+   "index": 29,
+   "id": "tbd69mzswnc68p97496tdbqdd",
+   "label": "29",
+   "floor": 0,
+   "position": {
+    "x": -10.913,
+    "y": 2.084,
+    "z": -0.009
+   },
+   "camera_height_m": 1.497,
+   "neighbours": [
+    25,
+    28,
+    30
+   ],
+   "room": "Bedroom"
+  },
+  {
+   "index": 30,
+   "id": "yymp87euqezbz6ws9xrm3u4pb",
+   "label": "30",
+   "floor": 0,
+   "position": {
+    "x": -12.132,
+    "y": 1.825,
+    "z": 0.001
+   },
+   "camera_height_m": 1.491,
+   "neighbours": [
+    25,
+    28,
+    29,
+    31
+   ],
+   "room": "Bedroom"
+  },
+  {
+   "index": 31,
+   "id": "f3pzmzhdp2ctz08q984xymata",
+   "label": "31",
+   "floor": 0,
+   "position": {
+    "x": -5.329,
+    "y": 1.481,
+    "z": 0.024
+   },
+   "camera_height_m": 1.494,
+   "neighbours": [
+    25,
+    28,
+    30,
+    32,
+    33,
+    34,
+    35,
+    36
+   ],
+   "room": "Bedroom"
+  },
+  {
+   "index": 32,
+   "id": "2yk53pfnxf3r2duerc8ibazhb",
+   "label": "32",
+   "floor": 0,
+   "position": {
+    "x": -3.085,
+    "y": 2.127,
+    "z": 0.033
+   },
+   "camera_height_m": 1.498,
+   "neighbours": [
+    1,
+    25,
+    31,
+    33,
+    34,
+    35,
+    36
+   ],
+   "room": "Bedroom"
+  },
+  {
+   "index": 33,
+   "id": "fy8ec4dfkm7mt9tdgkue04ktd",
+   "label": "33",
+   "floor": 0,
+   "position": {
+    "x": -3.316,
+    "y": 4.233,
+    "z": 0.024
+   },
+   "camera_height_m": 1.5,
+   "neighbours": [
+    31,
+    32
+   ],
+   "room": "Bedroom"
+  },
+  {
+   "index": 34,
+   "id": "xkr2bmc0g8ed9p49mdyz24rsc",
+   "label": "34",
+   "floor": 0,
+   "position": {
+    "x": -1.75,
+    "y": 2.143,
+    "z": 0.013
+   },
+   "camera_height_m": 1.499,
+   "neighbours": [
+    1,
+    25,
+    31,
+    32,
+    35,
+    36
+   ],
+   "room": "Closet"
+  },
+  {
+   "index": 35,
+   "id": "0up626zz41smhfgmc7rczku6c",
+   "label": "35",
+   "floor": 0,
+   "position": {
+    "x": -0.624,
+    "y": 2.145,
+    "z": 0.01
+   },
+   "camera_height_m": 1.5,
+   "neighbours": [
+    0,
+    1,
+    4,
+    25,
+    31,
+    32,
+    34,
+    36
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 36,
+   "id": "sa0ccfc88azxsste162hiipwd",
+   "label": "36",
+   "floor": 0,
+   "position": {
+    "x": 0.479,
+    "y": 2.668,
+    "z": 0.019
+   },
+   "camera_height_m": 1.5,
+   "neighbours": [
+    0,
+    1,
+    2,
+    3,
+    25,
+    31,
+    32,
+    34,
+    35
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 37,
+   "id": "kxq51hxy2bxidrsyq8i1qxmgb",
+   "label": "37",
+   "floor": 0,
+   "position": {
+    "x": 2.346,
+    "y": 0.008,
+    "z": 0.056
+   },
+   "camera_height_m": 1.498,
+   "neighbours": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    8,
+    9,
+    10,
+    11,
+    13,
+    38
+   ],
+   "room": "Living Room"
+  },
+  {
+   "index": 38,
+   "id": "7be25q2w4btrnsz6gx1xck7pb",
+   "label": "38",
+   "floor": 0,
+   "position": {
+    "x": 3.437,
+    "y": -0.092,
+    "z": 0.067
+   },
+   "camera_height_m": 1.485,
+   "neighbours": [
+    37
+   ],
+   "room": "Room"
+  }
+ ],
+ "walkable": [
+  [
+   [
+    -2.309,
+    0.825
+   ],
+   [
+    -2.298,
+    -4.197
+   ],
+   [
+    -6.938,
+    -4.207
+   ],
+   [
+    -6.938,
+    -3.892
+   ],
+   [
+    -6.941,
+    -2.755
+   ],
+   [
+    -6.945,
+    -0.648
+   ],
+   [
+    -6.948,
+    0.816
+   ],
+   [
+    -5.802,
+    0.818
+   ]
+  ],
+  [
+   [
+    -2.309,
+    0.825
+   ],
+   [
+    -2.298,
+    -4.197
+   ],
+   [
+    -2.297,
+    -4.756
+   ],
+   [
+    2.823,
+    -4.745
+   ],
+   [
+    2.811,
+    1.063
+   ],
+   [
+    -1.126,
+    1.055
+   ],
+   [
+    -2.309,
+    1.052
+   ]
+  ],
+  [
+   [
+    -1.126,
+    1.055
+   ],
+   [
+    2.811,
+    1.063
+   ],
+   [
+    2.803,
+    4.912
+   ],
+   [
+    -1.134,
+    4.904
+   ]
+  ],
+  [
+   [
+    -12.986,
+    4.88
+   ],
+   [
+    -8.83,
+    4.888
+   ],
+   [
+    -8.823,
+    1.872
+   ],
+   [
+    -8.821,
+    0.812
+   ],
+   [
+    -12.977,
+    0.803
+   ]
+  ],
+  [
+   [
+    -2.309,
+    0.825
+   ],
+   [
+    -5.802,
+    0.818
+   ],
+   [
+    -5.804,
+    1.878
+   ],
+   [
+    -5.808,
+    3.658
+   ],
+   [
+    -5.81,
+    4.895
+   ],
+   [
+    -2.317,
+    4.902
+   ],
+   [
+    -2.309,
+    1.052
+   ]
+  ],
+  [
+   [
+    -10.592,
+    -0.212
+   ],
+   [
+    -10.593,
+    0.396
+   ],
+   [
+    -8.564,
+    0.4
+   ],
+   [
+    -8.562,
+    -0.651
+   ],
+   [
+    -8.114,
+    -0.65
+   ],
+   [
+    -8.11,
+    -2.758
+   ],
+   [
+    -10.576,
+    -2.763
+   ],
+   [
+    -11.155,
+    -2.764
+   ],
+   [
+    -12.994,
+    -2.768
+   ],
+   [
+    -13.0,
+    -0.217
+   ]
+  ],
+  [
+   [
+    -6.938,
+    -4.207
+   ],
+   [
+    -6.938,
+    -3.892
+   ],
+   [
+    -6.941,
+    -2.755
+   ],
+   [
+    -8.11,
+    -2.758
+   ],
+   [
+    -10.576,
+    -2.763
+   ],
+   [
+    -10.572,
+    -4.859
+   ],
+   [
+    -10.57,
+    -5.584
+   ],
+   [
+    -10.57,
+    -5.766
+   ],
+   [
+    -6.934,
+    -5.759
+   ]
+  ],
+  [
+   [
+    -6.674,
+    1.876
+   ],
+   [
+    -6.678,
+    3.656
+   ],
+   [
+    -5.808,
+    3.658
+   ],
+   [
+    -5.81,
+    4.895
+   ],
+   [
+    -8.83,
+    4.888
+   ],
+   [
+    -8.823,
+    1.872
+   ]
+  ],
+  [
+   [
+    -2.309,
+    1.052
+   ],
+   [
+    -1.126,
+    1.055
+   ],
+   [
+    -1.134,
+    4.904
+   ],
+   [
+    -2.317,
+    4.902
+   ]
+  ],
+  [
+   [
+    -10.572,
+    -4.859
+   ],
+   [
+    -10.57,
+    -5.584
+   ],
+   [
+    -11.188,
+    -5.585
+   ],
+   [
+    -11.188,
+    -5.768
+   ],
+   [
+    -12.988,
+    -5.771
+   ],
+   [
+    -12.992,
+    -3.944
+   ],
+   [
+    -11.568,
+    -3.941
+   ],
+   [
+    -10.842,
+    -4.86
+   ]
+  ],
+  [
+   [
+    -8.565,
+    0.812
+   ],
+   [
+    -8.821,
+    0.812
+   ],
+   [
+    -8.823,
+    1.872
+   ],
+   [
+    -6.674,
+    1.876
+   ],
+   [
+    -5.804,
+    1.878
+   ],
+   [
+    -5.802,
+    0.818
+   ],
+   [
+    -6.948,
+    0.816
+   ]
+  ],
+  [
+   [
+    -6.948,
+    0.816
+   ],
+   [
+    -6.945,
+    -0.648
+   ],
+   [
+    -8.114,
+    -0.65
+   ],
+   [
+    -8.562,
+    -0.651
+   ],
+   [
+    -8.564,
+    0.4
+   ],
+   [
+    -8.565,
+    0.812
+   ]
+  ],
+  [
+   [
+    -12.992,
+    -3.944
+   ],
+   [
+    -12.994,
+    -2.768
+   ],
+   [
+    -11.155,
+    -2.764
+   ],
+   [
+    -11.153,
+    -3.94
+   ],
+   [
+    -11.568,
+    -3.941
+   ]
+  ],
+  [
+   [
+    -6.674,
+    1.876
+   ],
+   [
+    -6.678,
+    3.656
+   ],
+   [
+    -5.808,
+    3.658
+   ],
+   [
+    -5.804,
+    1.878
+   ]
+  ]
+ ],
+ "hazards": [
+  {
+   "position": [
+    -4.54,
+    -1.63
+   ],
+   "height_m": 1.6,
+   "kind": "chandelier",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11,
+    24
+   ],
+   "detections": 13,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -8.99,
+    -4.4
+   ],
+   "height_m": 1.6,
+   "kind": "pendant light",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    8,
+    11,
+    12,
+    13,
+    15,
+    16,
+    18
+   ],
+   "detections": 7,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -7.58,
+    1.49
+   ],
+   "height_m": 1.8,
+   "kind": "pendant light",
+   "room": "Hallway",
+   "seen_from_sweeps": [
+    24,
+    25,
+    26,
+    31
+   ],
+   "detections": 5,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -8.6,
+    -1.2
+   ],
+   "height_m": 1.88,
+   "kind": "soffit",
+   "room": "Kitchen",
+   "seen_from_sweeps": [
+    19,
+    23,
+    24,
+    25
+   ],
+   "detections": 4,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -5.31,
+    0.6
+   ],
+   "height_m": 1.3,
+   "kind": "wall shelf",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    6,
+    7,
+    24
+   ],
+   "detections": 4,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -0.96,
+    2.08
+   ],
+   "height_m": 1.4,
+   "kind": "open door",
+   "room": "Living Room",
+   "seen_from_sweeps": [
+    1,
+    34,
+    35
+   ],
+   "detections": 5,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -12.73,
+    -0.51
+   ],
+   "height_m": 1.4,
+   "kind": "wall cabinet",
+   "room": "Kitchen",
+   "seen_from_sweeps": [
+    18,
+    19,
+    20
+   ],
+   "detections": 4,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -3.32,
+    0.98
+   ],
+   "height_m": 1.6,
+   "kind": "pendant light",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    5,
+    32,
+    34
+   ],
+   "detections": 3,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -2.5,
+    -3.76
+   ],
+   "height_m": 1.8,
+   "kind": "taxidermy mount",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    5,
+    9,
+    10
+   ],
+   "detections": 3,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -3.67,
+    0.82
+   ],
+   "height_m": 1.35,
+   "kind": "wall shelf",
+   "room": "Dining Room",
+   "seen_from_sweeps": [
+    6,
+    31
+   ],
+   "detections": 2,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    0.69,
+    3.82
+   ],
+   "height_m": 1.95,
+   "kind": "pendant light",
+   "room": "Living Room",
+   "seen_from_sweeps": [
+    0,
+    1
+   ],
+   "detections": 2,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  },
+  {
+   "position": [
+    -12.14,
+    -3.33
+   ],
+   "height_m": 1.95,
+   "kind": "doorway header",
+   "room": "Hallway",
+   "seen_from_sweeps": [
+    21,
+    22
+   ],
+   "detections": 2,
+   "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+  }
+ ],
+ "rooms": [
+  {
+   "id": "613htqkzf66zz7hf7n8kzszed",
+   "label": "Dining Room",
+   "floor": 0,
+   "polygon": [
+    [
+     -2.309,
+     0.825
+    ],
+    [
+     -2.298,
+     -4.197
+    ],
+    [
+     -6.938,
+     -4.207
+    ],
+    [
+     -6.938,
+     -3.892
+    ],
+    [
+     -6.941,
+     -2.755
+    ],
+    [
+     -6.945,
+     -0.648
+    ],
+    [
+     -6.948,
+     0.816
+    ],
+    [
+     -5.802,
+     0.818
+    ]
+   ],
+   "area_m2": 21.4,
+   "ceiling_min_m": 2.680794231593609
+  },
+  {
+   "id": "cdz3fkt38kae7tapstpt0eaeb",
+   "label": "Living Room",
+   "floor": 0,
+   "polygon": [
+    [
+     -2.309,
+     0.825
+    ],
+    [
+     -2.298,
+     -4.197
+    ],
+    [
+     -2.297,
+     -4.756
+    ],
+    [
+     2.823,
+     -4.745
+    ],
+    [
+     2.811,
+     1.063
+    ],
+    [
+     -1.126,
+     1.055
+    ],
+    [
+     -2.309,
+     1.052
+    ]
+   ],
+   "area_m2": 28.6,
+   "ceiling_min_m": 2.6616614796221256
+  },
+  {
+   "id": "xy2x8mpaaqknp7q2c3nnbw1ma",
+   "label": "Living Room",
+   "floor": 0,
+   "polygon": [
+    [
+     -1.126,
+     1.055
+    ],
+    [
+     2.811,
+     1.063
+    ],
+    [
+     2.803,
+     4.912
+    ],
+    [
+     -1.134,
+     4.904
+    ]
+   ],
+   "area_m2": 14.4,
+   "ceiling_min_m": 2.73052023909986
+  },
+  {
+   "id": "tt6gm2a0463x9wmnx7rn6gugc",
+   "label": "Bedroom",
+   "floor": 0,
+   "polygon": [
+    [
+     -12.986,
+     4.88
+    ],
+    [
+     -8.83,
+     4.888
+    ],
+    [
+     -8.823,
+     1.872
+    ],
+    [
+     -8.821,
+     0.812
+    ],
+    [
+     -12.977,
+     0.803
+    ]
+   ],
+   "area_m2": 16.1,
+   "ceiling_min_m": 2.703890785574913
+  },
+  {
+   "id": "h26t7ky77ew74yb0pg8qqf5rd",
+   "label": "Bedroom",
+   "floor": 0,
+   "polygon": [
+    [
+     -2.309,
+     0.825
+    ],
+    [
+     -5.802,
+     0.818
+    ],
+    [
+     -5.804,
+     1.878
+    ],
+    [
+     -5.808,
+     3.658
+    ],
+    [
+     -5.81,
+     4.895
+    ],
+    [
+     -2.317,
+     4.902
+    ],
+    [
+     -2.309,
+     1.052
+    ]
+   ],
+   "area_m2": 13.4,
+   "ceiling_min_m": 2.7127091735601425
+  },
+  {
+   "id": "3m54yff1z7crxaywd8if9rb0d",
+   "label": "Kitchen",
+   "floor": 0,
+   "polygon": [
+    [
+     -10.592,
+     -0.212
+    ],
+    [
+     -10.593,
+     0.396
+    ],
+    [
+     -8.564,
+     0.4
+    ],
+    [
+     -8.562,
+     -0.651
+    ],
+    [
+     -8.114,
+     -0.65
+    ],
+    [
+     -8.11,
+     -2.758
+    ],
+    [
+     -10.576,
+     -2.763
+    ],
+    [
+     -11.155,
+     -2.764
+    ],
+    [
+     -12.994,
+     -2.768
+    ],
+    [
+     -13.0,
+     -0.217
+    ]
+   ],
+   "area_m2": 12.7,
+   "ceiling_min_m": 2.715007573366165
+  },
+  {
+   "id": "2qdmc5i9byxi79ry1pxdkqzea",
+   "label": "Dining Room",
+   "floor": 0,
+   "polygon": [
+    [
+     -6.938,
+     -4.207
+    ],
+    [
+     -6.938,
+     -3.892
+    ],
+    [
+     -6.941,
+     -2.755
+    ],
+    [
+     -8.11,
+     -2.758
+    ],
+    [
+     -10.576,
+     -2.763
+    ],
+    [
+     -10.572,
+     -4.859
+    ],
+    [
+     -10.57,
+     -5.584
+    ],
+    [
+     -10.57,
+     -5.766
+    ],
+    [
+     -6.934,
+     -5.759
+    ]
+   ],
+   "area_m2": 10.2,
+   "ceiling_min_m": 2.7122092954814434
+  },
+  {
+   "id": "19ab05tns5h6y4qm42esqqpea",
+   "label": "Bathroom",
+   "floor": 0,
+   "polygon": [
+    [
+     -6.674,
+     1.876
+    ],
+    [
+     -6.678,
+     3.656
+    ],
+    [
+     -5.808,
+     3.658
+    ],
+    [
+     -5.81,
+     4.895
+    ],
+    [
+     -8.83,
+     4.888
+    ],
+    [
+     -8.823,
+     1.872
+    ]
+   ],
+   "area_m2": 6.6,
+   "ceiling_min_m": 2.7253859005868435
+  },
+  {
+   "id": "b4qtykzcazp4iumkamm7y7h2b",
+   "label": "Closet",
+   "floor": 0,
+   "polygon": [
+    [
+     -2.309,
+     1.052
+    ],
+    [
+     -1.126,
+     1.055
+    ],
+    [
+     -1.134,
+     4.904
+    ],
+    [
+     -2.317,
+     4.902
+    ]
+   ],
+   "area_m2": 4.1,
+   "ceiling_min_m": 2.7525408777291887
+  },
+  {
+   "id": "ediidma5zg15dufx3n0qyq21a",
+   "label": "Bathroom",
+   "floor": 0,
+   "polygon": [
+    [
+     -10.572,
+     -4.859
+    ],
+    [
+     -10.57,
+     -5.584
+    ],
+    [
+     -11.188,
+     -5.585
+    ],
+    [
+     -11.188,
+     -5.768
+    ],
+    [
+     -12.988,
+     -5.771
+    ],
+    [
+     -12.992,
+     -3.944
+    ],
+    [
+     -11.568,
+     -3.941
+    ],
+    [
+     -10.842,
+     -4.86
+    ]
+   ],
+   "area_m2": 3.3,
+   "ceiling_min_m": 2.7232496831566095
+  },
+  {
+   "id": "wbpb7dkfuwnikd1kq2a9hz70a",
+   "label": "Hallway",
+   "floor": 0,
+   "polygon": [
+    [
+     -8.565,
+     0.812
+    ],
+    [
+     -8.821,
+     0.812
+    ],
+    [
+     -8.823,
+     1.872
+    ],
+    [
+     -6.674,
+     1.876
+    ],
+    [
+     -5.804,
+     1.878
+    ],
+    [
+     -5.802,
+     0.818
+    ],
+    [
+     -6.948,
+     0.816
+    ]
+   ],
+   "area_m2": 2.8,
+   "ceiling_min_m": 2.7117252312600613
+  },
+  {
+   "id": "n81qfe51azs8iexnbqwspye6c",
+   "label": "Hallway",
+   "floor": 0,
+   "polygon": [
+    [
+     -6.948,
+     0.816
+    ],
+    [
+     -6.945,
+     -0.648
+    ],
+    [
+     -8.114,
+     -0.65
+    ],
+    [
+     -8.562,
+     -0.651
+    ],
+    [
+     -8.564,
+     0.4
+    ],
+    [
+     -8.565,
+     0.812
+    ]
+   ],
+   "area_m2": 2.1,
+   "ceiling_min_m": 2.7305685095489025
+  },
+  {
+   "id": "kuc0fpmsgqxff63egrxrycfud",
+   "label": "Hallway",
+   "floor": 0,
+   "polygon": [
+    [
+     -12.992,
+     -3.944
+    ],
+    [
+     -12.994,
+     -2.768
+    ],
+    [
+     -11.155,
+     -2.764
+    ],
+    [
+     -11.153,
+     -3.94
+    ],
+    [
+     -11.568,
+     -3.941
+    ]
+   ],
+   "area_m2": 1.9,
+   "ceiling_min_m": 2.7330385632812977
+  },
+  {
+   "id": "3ygfq6yfyyw3hi9x7u5rm2iqa",
+   "label": "Bathroom",
+   "floor": 0,
+   "polygon": [
+    [
+     -6.674,
+     1.876
+    ],
+    [
+     -6.678,
+     3.656
+    ],
+    [
+     -5.808,
+     3.658
+    ],
+    [
+     -5.804,
+     1.878
+    ]
+   ],
+   "area_m2": 1.3,
+   "ceiling_min_m": 2.4900798185797957
+  }
+ ],
+ "openings": [
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 2.5,
+   "top_m": 2.1,
+   "bottom_m": 0.0,
+   "center": [
+    -2.304,
+    -1.721
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.78,
+   "top_m": 2.0,
+   "bottom_m": -0.03,
+   "center": [
+    -12.993,
+    -3.356
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 0.7,
+   "top_m": 2.24,
+   "bottom_m": 0.15,
+   "center": [
+    -6.677,
+    3.036
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 2.69,
+   "top_m": 2.08,
+   "bottom_m": 0.82,
+   "center": [
+    -8.713,
+    -5.762
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.73,
+   "top_m": 2.01,
+   "bottom_m": -0.02,
+   "center": [
+    -9.25,
+    -2.76
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 0.72,
+   "top_m": 2.02,
+   "bottom_m": -0.04,
+   "center": [
+    -6.936,
+    -4.97
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 1.15,
+   "top_m": 2.16,
+   "bottom_m": 0.05,
+   "center": [
+    2.813,
+    0.023
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 2.18,
+   "top_m": 2.15,
+   "bottom_m": 0.71,
+   "center": [
+    2.82,
+    -3.252
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 1.05,
+   "top_m": 2.08,
+   "bottom_m": 0.86,
+   "center": [
+    -3.364,
+    -4.199
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 1.12,
+   "top_m": 2.09,
+   "bottom_m": 0.85,
+   "center": [
+    -6.054,
+    -4.205
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.8,
+   "top_m": 2.09,
+   "bottom_m": 0.85,
+   "center": [
+    -12.34,
+    4.881
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.78,
+   "top_m": 1.99,
+   "bottom_m": 0.83,
+   "center": [
+    -9.446,
+    4.887
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.77,
+   "top_m": 2.05,
+   "bottom_m": 0.01,
+   "center": [
+    0.0,
+    1.057
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 1.01,
+   "top_m": 2.02,
+   "bottom_m": 1.11,
+   "center": [
+    -12.99,
+    -4.824
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 0.78,
+   "top_m": 2.03,
+   "bottom_m": -0.02,
+   "center": [
+    -6.947,
+    -0.023
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.51,
+   "top_m": 2.12,
+   "bottom_m": 0.63,
+   "center": [
+    -1.646,
+    -4.754
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.71,
+   "top_m": 2.04,
+   "bottom_m": -0.0,
+   "center": [
+    -5.803,
+    1.359
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.62,
+   "top_m": 2.05,
+   "bottom_m": -0.01,
+   "center": [
+    -7.724,
+    -0.65
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.98,
+   "top_m": 2.06,
+   "bottom_m": 0.0,
+   "center": [
+    -6.407,
+    0.817
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 0.76,
+   "top_m": 2.0,
+   "bottom_m": -0.04,
+   "center": [
+    -11.832,
+    -2.766
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 2.44,
+   "top_m": 2.14,
+   "bottom_m": 0.63,
+   "center": [
+    2.806,
+    3.362
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.61,
+   "top_m": 2.06,
+   "bottom_m": 1.16,
+   "center": [
+    -6.605,
+    4.893
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.63,
+   "top_m": 2.05,
+   "bottom_m": 1.15,
+   "center": [
+    -7.997,
+    4.89
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.76,
+   "top_m": 2.02,
+   "bottom_m": -0.02,
+   "center": [
+    -7.534,
+    0.814
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.95,
+   "top_m": 2.06,
+   "bottom_m": 1.15,
+   "center": [
+    -11.715,
+    -5.769
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.72,
+   "top_m": 2.03,
+   "bottom_m": -0.01,
+   "center": [
+    -6.939,
+    -3.331
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.77,
+   "top_m": 2.09,
+   "bottom_m": 0.87,
+   "center": [
+    -12.985,
+    4.27
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.76,
+   "top_m": 1.96,
+   "bottom_m": 0.85,
+   "center": [
+    -12.979,
+    1.439
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 0.92,
+   "top_m": 2.7,
+   "bottom_m": -0.02,
+   "center": [
+    -8.563,
+    -0.141
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.73,
+   "top_m": 2.01,
+   "bottom_m": -0.03,
+   "center": [
+    -8.822,
+    1.366
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.72,
+   "top_m": 2.07,
+   "bottom_m": 0.01,
+   "center": [
+    -1.128,
+    2.098
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 1.04,
+   "top_m": 2.11,
+   "bottom_m": 0.81,
+   "center": [
+    2.117,
+    4.911
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.98,
+   "top_m": 2.09,
+   "bottom_m": 0.79,
+   "center": [
+    -0.38,
+    4.906
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.66,
+   "top_m": 1.99,
+   "bottom_m": 1.09,
+   "center": [
+    -12.998,
+    -0.952
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.66,
+   "top_m": 1.98,
+   "bottom_m": 1.11,
+   "center": [
+    -12.995,
+    -2.256
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.66,
+   "top_m": 2.06,
+   "bottom_m": 0.01,
+   "center": [
+    -2.312,
+    2.078
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.76,
+   "top_m": 2.02,
+   "bottom_m": -0.02,
+   "center": [
+    -7.487,
+    1.874
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.58,
+   "top_m": 2.04,
+   "bottom_m": -0.02,
+   "center": [
+    -7.771,
+    -2.757
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-unknown",
+   "width_m": 0.76,
+   "top_m": 2.04,
+   "bottom_m": -0.03,
+   "center": [
+    -12.26,
+    -3.942
+   ],
+   "floor": 0
+  },
+  {
+   "type": "window",
+   "label": "window-unknown",
+   "width_m": 0.68,
+   "top_m": 2.07,
+   "bottom_m": 0.85,
+   "center": [
+    -5.009,
+    4.896
+   ],
+   "floor": 0
+  },
+  {
+   "type": "doorway",
+   "label": "door-pivot",
+   "width_m": 0.8,
+   "top_m": 2.03,
+   "bottom_m": -0.03,
+   "center": [
+    -12.457,
+    0.804
+   ],
+   "floor": 0
+  }
+ ],
+ "walls": [
+  {
+   "a": [
+    -10.592141265015032,
+    -0.21217901237369227
+   ],
+   "b": [
+    -10.59340890609698,
+    0.39570229337101437
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3089300561342614,
+    0.825354891298228
+   ],
+   "b": [
+    -2.2984497237631976,
+    -4.19724301521039
+   ],
+   "type": "wall",
+   "thickness": 0.28,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.99179965000944,
+    -3.943930562536103
+   ],
+   "b": [
+    -12.994295768016684,
+    -2.768085260253077
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.674304755481155,
+    1.8760104727136049
+   ],
+   "b": [
+    -6.678023020234487,
+    3.6564160310363785
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.937550775413492,
+    -4.206923151396678
+   ],
+   "b": [
+    -6.938230005926144,
+    -3.891999334086628
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.565183851837983,
+    0.8121573919111246
+   ],
+   "b": [
+    -8.821185260171964,
+    0.81160404256332
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -10.57158396168834,
+    -4.859018296309398
+   ],
+   "b": [
+    -10.570056332932316,
+    -5.584083866106503
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3093980669391536,
+    1.0523971991486756
+   ],
+   "b": [
+    -1.1256543256893066,
+    1.0548555322646593
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -10.569677924917531,
+    -5.76637660143167
+   ],
+   "b": [
+    -6.934306435644424,
+    -5.758785388953116
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.109750424992317,
+    -2.7576005565347947
+   ],
+   "b": [
+    -10.576004018684836,
+    -2.762896382971524
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.297284708772749,
+    -4.755669764923909
+   ],
+   "b": [
+    -2.2984497237631976,
+    -4.19724301521039
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3174104164516884,
+    4.901896299188831
+   ],
+   "b": [
+    -1.1336387340174512,
+    4.904324772607721
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.937550775413492,
+    -4.206923151396678
+   ],
+   "b": [
+    -6.934306435644424,
+    -5.758785388953116
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    2.8231082625292823,
+    -4.7450358678300635
+   ],
+   "b": [
+    2.8110482615561665,
+    1.0630233273197482
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -10.569677924917531,
+    -5.76637660143167
+   ],
+   "b": [
+    -10.570056332932316,
+    -5.584083866106503
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.937550775413492,
+    -4.206923151396678
+   ],
+   "b": [
+    -2.2984497237631976,
+    -4.19724301521039
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.9858864960696,
+    4.879805266321002
+   ],
+   "b": [
+    -8.82966447237761,
+    4.888449514210081
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -10.842009227666724,
+    -4.8595891961948805
+   ],
+   "b": [
+    -10.57158396168834,
+    -4.859018296309398
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.82966447237761,
+    4.888449514210081
+   ],
+   "b": [
+    -8.823395737562018,
+    1.8715288233341116
+   ],
+   "type": "wall",
+   "thickness": 0.22,
+   "floor": 0
+  },
+  {
+   "a": [
+    -1.1256543256893066,
+    1.0548555322646593
+   ],
+   "b": [
+    2.8110482615561665,
+    1.0630233273197482
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.109750424992317,
+    -2.7576005565347947
+   ],
+   "b": [
+    -8.114234487157765,
+    -0.6504138637004664
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -5.807665776602293,
+    3.6582293816811737
+   ],
+   "b": [
+    -6.678023020234487,
+    3.6564160310363785
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.99179965000944,
+    -3.943930562536103
+   ],
+   "b": [
+    -12.987959031477052,
+    -5.771361154254667
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.948331109001704,
+    0.8156256544227776
+   ],
+   "b": [
+    -6.945191965133141,
+    -0.6479261064799673
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    2.8231082625292823,
+    -4.7450358678300635
+   ],
+   "b": [
+    -2.297284708772749,
+    -4.755669764923909
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3089300561342614,
+    0.825354891298228
+   ],
+   "b": [
+    -5.80173881419037,
+    0.8180527896834857
+   ],
+   "type": "wall",
+   "thickness": 0.12,
+   "floor": 0
+  },
+  {
+   "a": [
+    -5.80173881419037,
+    0.8180527896834857
+   ],
+   "b": [
+    -5.803958519960823,
+    1.8778307941032726
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.945191965133141,
+    -0.6479261064799673
+   ],
+   "b": [
+    -8.114234487157765,
+    -0.6504138637004664
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.948331109001704,
+    0.8156256544227776
+   ],
+   "b": [
+    -5.80173881419037,
+    0.8180527896834857
+   ],
+   "type": "wall",
+   "thickness": 0.12,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.155197839680838,
+    -2.76415232656364
+   ],
+   "b": [
+    -12.994295768016684,
+    -2.768085260253077
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.940667123098977,
+    -2.7550940186144848
+   ],
+   "b": [
+    -6.945191965133141,
+    -0.6479261064799673
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    2.8030614600011843,
+    4.912481943588205
+   ],
+   "b": [
+    2.8110482615561665,
+    1.0630233273197482
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3093980669391536,
+    1.0523971991486756
+   ],
+   "b": [
+    -2.3089300561342614,
+    0.825354891298228
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -5.810217523178687,
+    4.894688391497571
+   ],
+   "b": [
+    -8.82966447237761,
+    4.888449514210081
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.948331109001704,
+    0.8156256544227776
+   ],
+   "b": [
+    -8.565183851837983,
+    0.8121573919111246
+   ],
+   "type": "wall",
+   "thickness": 0.12,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.987959031477052,
+    -5.771361154254667
+   ],
+   "b": [
+    -11.187802645239145,
+    -5.767591718374265
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.674304755481155,
+    1.8760104727136049
+   ],
+   "b": [
+    -5.803958519960823,
+    1.8778307941032726
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.940667123098977,
+    -2.7550940186144848
+   ],
+   "b": [
+    -6.938230005926144,
+    -3.891999334086628
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -10.57158396168834,
+    -4.859018296309398
+   ],
+   "b": [
+    -10.576004018684836,
+    -2.762896382971524
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.9858864960696,
+    4.879805266321002
+   ],
+   "b": [
+    -12.977405033373945,
+    0.8028669157595731
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.562097315885676,
+    -0.6513625779151982
+   ],
+   "b": [
+    -8.564322448801116,
+    0.399955370719002
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.821185260171964,
+    0.81160404256332
+   ],
+   "b": [
+    -8.823395737562018,
+    1.8715288233341116
+   ],
+   "type": "wall",
+   "thickness": 0.09,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.15268377432635,
+    -3.9400647351626166
+   ],
+   "b": [
+    -11.155197839680838,
+    -2.76415232656364
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -1.1256543256893066,
+    1.0548555322646593
+   ],
+   "b": [
+    -1.1336387340174512,
+    4.904324772607721
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    2.8030614600011843,
+    4.912481943588205
+   ],
+   "b": [
+    -1.1336387340174512,
+    4.904324772607721
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.999637711334659,
+    -0.21721724136495313
+   ],
+   "b": [
+    -12.994295768016684,
+    -2.768085260253077
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.155197839680838,
+    -2.76415232656364
+   ],
+   "b": [
+    -10.576004018684836,
+    -2.762896382971524
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3093980669391536,
+    1.0523971991486756
+   ],
+   "b": [
+    -2.3174104164516884,
+    4.901896299188831
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.562097315885676,
+    -0.6513625779151982
+   ],
+   "b": [
+    -8.114234487157765,
+    -0.6504138637004664
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.564322448801116,
+    0.399955370719002
+   ],
+   "b": [
+    -10.59340890609698,
+    0.39570229337101437
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.15268377432635,
+    -3.9400647351626166
+   ],
+   "b": [
+    -11.568054715522692,
+    -3.9409416800556416
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -12.999637711334659,
+    -0.21721724136495313
+   ],
+   "b": [
+    -10.592141265015032,
+    -0.21217901237369227
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.674304755481155,
+    1.8760104727136049
+   ],
+   "b": [
+    -8.823395737562018,
+    1.8715288233341116
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -5.810217523178687,
+    4.894688391497571
+   ],
+   "b": [
+    -5.807665776602293,
+    3.6582293816811737
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.940667123098977,
+    -2.7550940186144848
+   ],
+   "b": [
+    -8.109750424992317,
+    -2.7576005565347947
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.188178434445273,
+    -5.585388302852993
+   ],
+   "b": [
+    -11.187802645239145,
+    -5.767591718374265
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.568054715522692,
+    -3.9409416800556416
+   ],
+   "b": [
+    -12.99179965000944,
+    -3.943930562536103
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.565183851837983,
+    0.8121573919111246
+   ],
+   "b": [
+    -8.564322448801116,
+    0.399955370719002
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -6.938230005926144,
+    -3.891999334086628
+   ],
+   "b": [
+    -7.5111999377608605,
+    -3.8932300891044007
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  },
+  {
+   "a": [
+    -2.3174104164516884,
+    4.901896299188831
+   ],
+   "b": [
+    -5.810217523178687,
+    4.894688391497571
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -8.821185260171964,
+    0.81160404256332
+   ],
+   "b": [
+    -12.977405033373945,
+    0.8028669157595731
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.188178434445273,
+    -5.585388302852993
+   ],
+   "b": [
+    -10.570056332932316,
+    -5.584083866106503
+   ],
+   "type": "wall",
+   "thickness": 0.16,
+   "floor": 0
+  },
+  {
+   "a": [
+    -11.568054715522692,
+    -3.9409416800556416
+   ],
+   "b": [
+    -10.842009227666724,
+    -4.8595891961948805
+   ],
+   "type": "wall",
+   "thickness": 0.11,
+   "floor": 0
+  },
+  {
+   "a": [
+    -5.807665776602293,
+    3.6582293816811737
+   ],
+   "b": [
+    -5.803958519960823,
+    1.8778307941032726
+   ],
+   "type": "wall",
+   "thickness": 0.1,
+   "floor": 0
+  }
+ ],
+ "floors": [
+  {
+   "index": 0,
+   "id": "tsmq1wak12rhgn0mawksxcwcd",
+   "z": 0.0,
+   "name": "Ground floor"
+  }
+ ],
+ "geocoordinates": {
+  "altitude": 120.19999694824219,
+  "latitude": 34.093491666999995,
+  "longitude": -118.3171,
+  "translation": {
+   "x": -1.7176263396948608,
+   "y": 6.5877525822685445,
+   "z": 0.0
+  },
+  "rotation": {
+   "x": 0.0,
+   "y": 0.0,
+   "z": 0.7289895896353398,
+   "w": 0.6845247827531877
+  }
+ },
+ "georef": {
+  "lat0": 34.0935508,
+  "lon0": -118.3171186,
+  "rotation_deg": 93.6,
+  "method": "Matterport showcase geocoordinates (east,north = R(theta) p + t), verified by eye on Vexcel; ~2-3 m offset",
+  "convention": "east,north = R_ccw(rotation_deg) @ [x,y]; compass heading = map heading - rotation_deg"
+ },
+ "meta": {
+  "source": "public showcase page data (MP_PREFETCHED_MODELDATA, GetModelViewPrefetch, GetRoomBounds)",
+  "frame": "metres, Model API frame (+Z up, measured), floor z=0",
+  "showcase_ss": "ss = index + 1 (1-based, measured)",
+  "hazards": {
+   "method": "Gemini Vision (gemini-3.7-flash) on 4 first-person renders per sweep; detection placed from sweep position + yaw + frame_x (HFOV~100 deg) + estimated distance; trusted only if seen from >=2 sweeps within 1.0 m / 0.3 m",
+   "renders": 39,
+   "answered": 132,
+   "failed": 2,
+   "raw_detections": 81,
+   "rejected_single_sweep": [
+    {
+     "position": [
+      -4.79,
+      -2.4
+     ],
+     "height_m": 1.6,
+     "kind": "chandelier",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      6
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.21,
+      -1.53
+     ],
+     "height_m": 1.6,
+     "kind": "chandelier",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      6
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -5.67,
+      -3.88
+     ],
+     "height_m": 1.3,
+     "kind": "candelabra",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      8
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -8.42,
+      -4.07
+     ],
+     "height_m": 1.8,
+     "kind": "hanging lantern",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      9
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.96,
+      -4.19
+     ],
+     "height_m": 1.5,
+     "kind": "hanging censer",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      9
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.88,
+      -0.55
+     ],
+     "height_m": 2.0,
+     "kind": "beam",
+     "room": "Living Room",
+     "seen_from_sweeps": [
+      10
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -8.74,
+      -3.7
+     ],
+     "height_m": 1.4,
+     "kind": "pendant light",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      14
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -8.45,
+      -5.24
+     ],
+     "height_m": 1.6,
+     "kind": "pendant light",
+     "room": "Dining Room",
+     "seen_from_sweeps": [
+      17
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -11.51,
+      -5.3
+     ],
+     "height_m": 1.35,
+     "kind": "extending mirror",
+     "room": "Bathroom",
+     "seen_from_sweeps": [
+      21
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -10.64,
+      -1.56
+     ],
+     "height_m": 1.95,
+     "kind": "doorway header",
+     "room": "Kitchen",
+     "seen_from_sweeps": [
+      23
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -7.25,
+      -0.04
+     ],
+     "height_m": 1.95,
+     "kind": "doorway header",
+     "room": "Hallway",
+     "seen_from_sweeps": [
+      23
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -4.51,
+      1.24
+     ],
+     "height_m": 1.85,
+     "kind": "pendant light",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      25
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.96,
+      1.72
+     ],
+     "height_m": 1.2,
+     "kind": "shelf",
+     "room": "Closet",
+     "seen_from_sweeps": [
+      32
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.88,
+      4.79
+     ],
+     "height_m": 1.2,
+     "kind": "shelf",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      33
+     ],
+     "detections": 2,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -3.52,
+      2.04
+     ],
+     "height_m": 1.8,
+     "kind": "pendant light",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      33
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -2.79,
+      3.67
+     ],
+     "height_m": 1.3,
+     "kind": "shelf",
+     "room": "Bedroom",
+     "seen_from_sweeps": [
+      33
+     ],
+     "detections": 2,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.83,
+      2.84
+     ],
+     "height_m": 1.4,
+     "kind": "clothes rack",
+     "room": "Closet",
+     "seen_from_sweeps": [
+      34
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      -1.71,
+      1.24
+     ],
+     "height_m": 1.6,
+     "kind": "shelf",
+     "room": "Closet",
+     "seen_from_sweeps": [
+      34
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    },
+    {
+     "position": [
+      0.21,
+      1.29
+     ],
+     "height_m": 1.4,
+     "kind": "open door",
+     "room": "Living Room",
+     "seen_from_sweeps": [
+      35
+     ],
+     "detections": 1,
+     "method": "gemini-vision on first-person renders, cross-checked across sweeps"
+    }
+   ]
+  }
+ }
+}
