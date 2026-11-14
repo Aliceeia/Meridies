@@ -26,6 +26,22 @@ python connect/server.py          # http://localhost:8765
 | `frontend/` | Vanilla JS, no build. SVG map, click to walk, record, HRTF proximity chime + confirmed playback, AI description + speech, user switch + visibility. |
 | `tests/e2e_memory.py` | Drives installed Chrome with a fake mic: `python connect/tests/e2e_memory.py 2|3|4|5`. |
 
+## Indoors (default building): 5836 La Mirada Ave, Los Angeles (`zvKHR9DHNjJ`)
+
+Public Matterport showcase, no API key. Measured, not assumed:
+`ss` = sweep index **+ 1**; `sr` = **pitch,yaw** (radians); showcase yaw is counter-clockwise from +Y,
+so `yaw = -map_heading`; frame is +Z up (camera 1.496 m above each floor point).
+
+| File | What |
+|---|---|
+| `backend/interior_render.py` | `render_view(sweep, yaw)` → PNG via headless Chrome; waits for a stable, textured frame; crops chrome; caches in `data/cache/interior/`. |
+| `spike/interior_map.py` | Sweeps + neighbours from the page's own data, rooms/walls/doors from GetRoomBounds, georef from showcase geocoordinates → `data/interior_floorplan.json`. |
+| `spike/interior_hazards.py` | Gemini Vision on 4 renders per sweep; hazards kept only if seen from ≥2 sweeps. **Needs quota**: free tier is 20 requests/day/model. |
+| `backend/describe.py` | Three images to Gemini: first-person (primary), Vexcel aerial, floor plan. |
+
+Walking indoors is sweep to sweep (click a highlighted sweep, ↑/↓ to the neighbour ahead/behind);
+the first-person panel shows the pre-rendered view nearest the heading (4 per sweep).
+
 ## Memory record
 
 ```json

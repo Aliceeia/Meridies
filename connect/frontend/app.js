@@ -39,8 +39,16 @@ function insidePoly(x, y, poly) {
   }
   return inside;
 }
-const walkable = (x, y) => insidePoly(x, y, state.plan.walkable);
+const isInterior = () => state.plan && state.plan.kind === "interior";
+const sweepAt = (i) => isInterior() && state.plan.sweeps.find((s) => s.index === i);
+const walkable = (x, y) => isInterior()
+  ? state.plan.walkable.some((poly) => insidePoly(x, y, poly))   // interior: any room
+  : insidePoly(x, y, state.plan.walkable);
 function currentZone() {
+  if (isInterior()) {
+    const s = sweepAt(state.walker.sweep);
+    return s ? { name: `${s.room} · sweep ${s.index}` } : null;
+  }
   const { x, y } = state.walker;
   let best = null;
   for (const z of state.plan.zones) {
@@ -54,7 +62,70 @@ function currentZone() {
 const map = $("map");
 let layers = {};
 function drawMap() {
+  map.replaceChildren();
   const p = state.plan;
+  state.k = isInterior() ? 0.38 : 1;   // glyph scale: the house is ~16 m across, the yard 50 m
+  if (isInterior()) drawInterior(p); else drawYard(p);
+  layers.anchors = svgEl("g", {}, map);
+  layers.walker = svgEl("g", {}, map);
+  const wg = svgEl("g", { transform: `scale(${state.k})` }, layers.walker);
+  // heading cone (60 deg) + body + nose
+  svgEl("path", { d: coneD(5, 30), fill: "rgba(255,255,255,.22)", stroke: "rgba(255,255,255,.6)", "stroke-width": 0.08 }, wg);
+  svgEl("circle", { r: 0.8, fill: "var(--walker)", stroke: "#000", "stroke-width": 0.15 }, wg);
+  svgEl("path", { d: "M 0 -2.1 L 0.7 -0.65 L -0.7 -0.65 Z", fill: "var(--walker)", stroke: "#000", "stroke-width": 0.1 }, wg);
+}
+
+function drawInterior(p) {
+  const xs = p.rooms.flatMap((r) => r.polygon.map((q) => q[0])), ys = p.rooms.flatMap((r) => r.polygon.map((q) => q[1]));
+  const pad = 1.2, x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  map.setAttribute("viewBox", `${x0} ${-y1} ${x1 - x0} ${y1 - y0}`);
+  svgEl("rect", { x: x0, y: -y1, width: x1 - x0, height: y1 - y0, fill: "#0d1117" }, map);
+  const rg = svgEl("g", {}, map);
+  for (const r of p.rooms) {
+    svgEl("polygon", { points: r.polygon.map(([x, y]) => `${x},${-y}`).join(" "), fill: "rgba(63,208,224,.10)" }, rg);
+    const cx = r.polygon.reduce((s, q) => s + q[0], 0) / r.polygon.length, cy = r.polygon.reduce((s, q) => s + q[1], 0) / r.polygon.length;
+    const t = svgEl("text", { x: cx, y: -cy, fill: "var(--dim)", "font-size": 0.42, "text-anchor": "middle", opacity: 0.85 }, rg);
+    t.textContent = r.label;
+  }
+  for (const w of p.walls) {
+    svgEl("line", { x1: w.a[0], y1: -w.a[1], x2: w.b[0], y2: -w.b[1], stroke: w.type === "wall" ? "#e6edf3" : "#5b636b",
+      "stroke-width": w.type === "wall" ? Math.max(0.1, w.thickness || 0.12) : 0.04, "stroke-linecap": "round" }, rg);
+  }
+  for (const o of p.openings || []) {
+    if (o.type !== "doorway") continue;
+    svgEl("rect", { x: o.center[0] - 0.18, y: -o.center[1] - 0.18, width: 0.36, height: 0.36, fill: "#0d1117",
+      stroke: "var(--community)", "stroke-width": 0.06 }, rg);
+  }
+  for (const h of p.hazards || []) {
+    const g = svgEl("g", { transform: `translate(${h.position[0]},${-h.position[1]})` }, rg);
+    svgEl("path", { d: "M -0.25 -0.25 L 0.25 0.25 M -0.25 0.25 L 0.25 -0.25", stroke: "magenta", "stroke-width": 0.1 }, g);
+    const t = svgEl("text", { y: 0.65, fill: "magenta", "font-size": 0.38, "text-anchor": "middle" }, g);
+    t.textContent = `${h.kind} ${h.height_m.toFixed(2)} m`;
+  }
+  layers.sweeps = svgEl("g", {}, map);
+  for (const s of p.sweeps) {
+    const c = svgEl("circle", { cx: s.position.x, cy: -s.position.y, r: 0.2, class: "sweep", "data-i": s.index,
+      fill: "#30363d", stroke: "#9aa4af", "stroke-width": 0.04 }, layers.sweeps);
+    c.addEventListener("click", (e) => { e.stopPropagation(); goToSweep(s.index); });
+  }
+  const sb = svgEl("g", { transform: `translate(${x0 + 0.5},${-y0 - 0.5})` }, map);
+  svgEl("rect", { x: 0, y: -0.06, width: 1, height: 0.12, fill: "#fff" }, sb);
+  const st = svgEl("text", { x: 0.5, y: -0.2, fill: "#fff", "font-size": 0.35, "text-anchor": "middle" }, sb);
+  st.textContent = "1 m";
+}
+
+// highlight the sweep you stand on and the ones you can step to
+function updateSweeps() {
+  if (!isInterior() || !layers.sweeps) return;
+  const cur = sweepAt(state.walker.sweep), nb = new Set(cur ? cur.neighbours : []);
+  for (const c of layers.sweeps.children) {
+    const i = +c.dataset.i;
+    c.setAttribute("fill", i === state.walker.sweep ? "#fff" : nb.has(i) ? "var(--walk)" : "#30363d");
+    c.setAttribute("r", nb.has(i) ? 0.26 : 0.2);
+  }
+}
+
+function drawYard(p) {
   const [x0, x1, y0, y1] = p.backdrop.extent;
   map.setAttribute("viewBox", `${x0} ${-y1} ${x1 - x0} ${y1 - y0}`); // SVG y = -map y
   svgEl("image", { href: `/data/${p.backdrop.image}`, x: x0, y: -y1, width: x1 - x0, height: y1 - y0,
@@ -74,13 +145,6 @@ function drawMap() {
   svgEl("rect", { x: 0, y: -0.25, width: 5, height: 0.5, fill: "#fff" }, sb);
   const st = svgEl("text", { x: 2.5, y: -0.8, fill: "#fff", "font-size": 1.1, "text-anchor": "middle" }, sb);
   st.textContent = "5 m";
-
-  layers.anchors = svgEl("g", {}, map);
-  layers.walker = svgEl("g", {}, map);
-  // heading cone (60 deg) + body + nose
-  svgEl("path", { d: coneD(5, 30), fill: "rgba(255,255,255,.22)", stroke: "rgba(255,255,255,.6)", "stroke-width": 0.08 }, layers.walker);
-  svgEl("circle", { r: 0.8, fill: "var(--walker)", stroke: "#000", "stroke-width": 0.15 }, layers.walker);
-  svgEl("path", { d: "M 0 -2.1 L 0.7 -0.65 L -0.7 -0.65 Z", fill: "var(--walker)", stroke: "#000", "stroke-width": 0.1 }, layers.walker);
 }
 function coneD(r, half) {
   const a = rad(half);
@@ -108,15 +172,54 @@ const SPEED = 1.4; // m/s, walking pace
 map.addEventListener("click", (e) => {
   if (typeof rec !== "undefined" && rec.mr) return toast("Recording — stay put");
   const p = svgPoint(e);
+  if (isInterior()) {   // indoors you move sweep to sweep: snap the click to the nearest sweep
+    const s = state.plan.sweeps.reduce((b, s) => {
+      const d = Math.hypot(s.position.x - p.x, s.position.y - p.y);
+      return d < b.d ? { s, d } : b;
+    }, { s: null, d: 1e9 });
+    return s.d < 0.8 ? goToSweep(s.s.index) : toast("Click a highlighted sweep");
+  }
   if (!walkable(p.x, p.y)) return toast("Not walkable there");
   state.target = p;
 });
+
+// Interior: walk to a NEIGHBOURING sweep (the showcase's own line-of-sight links).
+function goToSweep(i, keepHeading = false) {
+  if (typeof rec !== "undefined" && rec.mr) return toast("Recording — stay put");
+  const cur = sweepAt(state.walker.sweep);
+  if (i === state.walker.sweep || state.target) return;
+  if (cur && !cur.neighbours.includes(i)) return toast("Not reachable in one step — pick a highlighted sweep");
+  const s = sweepAt(i);
+  state.target = { x: s.position.x, y: s.position.y, sweep: i, keepHeading };
+}
+// Best neighbour in a direction (map heading, degrees), within +-60 degrees.
+function neighbourToward(headingDeg) {
+  const cur = sweepAt(state.walker.sweep);
+  if (!cur) return null;
+  let best = null;
+  for (const i of cur.neighbours) {
+    const s = sweepAt(i), dx = s.position.x - cur.position.x, dy = s.position.y - cur.position.y;
+    const off = Math.abs(((deg(Math.atan2(dx, dy)) - headingDeg + 540) % 360) - 180);
+    const score = off + 8 * Math.hypot(dx, dy);  // prefer on-axis, then near
+    if (off <= 60 && (!best || score < best.score)) best = { i, score };
+  }
+  return best && best.i;
+}
+
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("button, select, input, textarea")) return;
   if (typeof rec !== "undefined" && rec.mr) return;
   const w = state.walker;
   if (e.key === "ArrowLeft") w.heading = norm360(w.heading - 15);
   else if (e.key === "ArrowRight") w.heading = norm360(w.heading + 15);
+  else if (isInterior() && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    e.preventDefault();
+    if (state.target) return;
+    const back = e.key === "ArrowDown";
+    const i = neighbourToward(back ? norm360(w.heading + 180) : w.heading);
+    if (i == null) return toast(back ? "Nothing behind you to step back to" : "No sweep ahead — turn with ← →");
+    return goToSweep(i, back);
+  }
   else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     const s = e.key === "ArrowUp" ? 0.5 : -0.5;
     const nx = w.x + s * Math.sin(rad(w.heading)), ny = w.y + s * Math.cos(rad(w.heading));
@@ -133,9 +236,12 @@ function tick(now) {
   const w = state.walker, t = state.target;
   if (t) {
     const dx = t.x - w.x, dy = t.y - w.y, d = Math.hypot(dx, dy);
-    w.heading = norm360(deg(Math.atan2(dx, dy)));
+    if (!t.keepHeading && d > 1e-6) w.heading = norm360(deg(Math.atan2(dx, dy)));
     const step = SPEED * dt;
-    if (d <= step) { w.x = t.x; w.y = t.y; state.target = null; }
+    if (d <= step) {
+      w.x = t.x; w.y = t.y; state.target = null;
+      if (t.sweep != null) w.sweep = t.sweep;
+    }
     else { w.x += (dx / d) * step; w.y += (dy / d) * step; }
     renderWalker();
   }
@@ -185,9 +291,10 @@ function renderMemories() {
   state.memories.forEach((m, i) => {
     const g = svgEl("g", { transform: `translate(${m.position.x},${-m.position.y})` }, layers.anchors);
     const col = m.visibility === "community" ? "var(--community)" : "var(--mem)";
-    svgEl("circle", { r: 4, fill: "none", stroke: col, "stroke-width": 0.08, "stroke-dasharray": "0.3 0.3", opacity: 0.7 }, g);
-    svgEl("circle", { r: 0.75, fill: col, stroke: "#000", "stroke-width": 0.12 }, g);
-    const t = svgEl("text", { y: 0.42, fill: "#000", "font-size": 1.1, "font-weight": 700, "text-anchor": "middle" }, g);
+    const k = state.k || 1;   // the 4 m hearing ring stays true to scale; the pin scales with the map
+    svgEl("circle", { r: 4, fill: "none", stroke: col, "stroke-width": 0.08 * k, "stroke-dasharray": `${0.3 * k} ${0.3 * k}`, opacity: 0.7 }, g);
+    svgEl("circle", { r: 0.75 * k, fill: col, stroke: "#000", "stroke-width": 0.12 * k }, g);
+    const t = svgEl("text", { y: 0.42 * k, fill: "#000", "font-size": 1.1 * k, "font-weight": 700, "text-anchor": "middle" }, g);
     t.textContent = i + 1;
   });
   $("memCount").textContent = state.memories.length;
@@ -513,17 +620,64 @@ onWalkerChange(() => {
   $("compass").textContent = `${names[Math.round(c / 45) % 8]} (${String(Math.round(c)).padStart(3, "0")}°)`;
 });
 
-// ---------- boot ----------
-async function boot() {
-  state.plan = await (await fetch("/api/floorplan")).json();
+// ---------- first-person view (interior) ----------
+const COMPASS8 = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+let viewKey = null;
+onWalkerChange(() => {
+  updateSweeps();
+  if (!isInterior() || state.target) return;           // update once the walker has arrived
+  const w = state.walker, k = Math.round(norm360(-w.heading) / 90) % 4;  // 4 pre-rendered views per sweep
+  const key = `${state.plan.building.id}:${w.sweep}:${k}`;
+  if (key === viewKey) return;
+  viewKey = key;
+  const img = $("viewImg"), s = sweepAt(w.sweep);
+  const snapped = norm360(-k * 90);
+  const g = state.plan.georef;
+  const facing = g ? COMPASS8[Math.round(norm360(snapped - g.rotation_deg) / 45) % 8] : `${snapped}°`;
+  img.classList.add("loading");
+  img.onload = () => img.classList.remove("loading");
+  img.onerror = () => { img.classList.remove("loading"); toast("View not available"); };
+  img.src = `/api/view?building=${state.plan.building.id}&sweep=${w.sweep}&heading=${snapped}`;
+  $("viewCap").textContent = `${s ? s.room : ""} · facing ${facing}`;
+});
+
+// ---------- buildings ----------
+async function loadBuilding(bid) {
+  state.ready = false;
+  stopVoice(); speechSynthesis.cancel();
+  play.near = null; play.armed.clear(); state.target = null; viewKey = null;
+  state.plan = await (await fetch(`/api/floorplan?building=${encodeURIComponent(bid)}`)).json();
   $("bname").textContent = state.plan.building.name;
-  $("baddr").textContent = state.plan.building.address;
+  $("baddr").textContent = state.plan.building.address || (isInterior() ? "Interior scan (Matterport)" : "");
+  $("building").value = bid;
+  $("view").hidden = !isInterior();
   drawMap();
-  // start at the centre of the first zone (inside the walkable area)
-  const z = state.plan.zones[0];
-  Object.assign(state.walker, { x: z.center[0], y: z.center[1], heading: 0 });
+  if (isInterior()) {
+    const s = sweepAt(state.plan.start_sweep ?? state.plan.sweeps[0].index);
+    Object.assign(state.walker, { x: s.position.x, y: s.position.y, heading: 0, sweep: s.index });
+  } else {
+    const z = state.plan.zones[0];   // start at the centre of the first zone (inside the walkable area)
+    Object.assign(state.walker, { x: z.center[0], y: z.center[1], heading: 0, sweep: null });
+  }
   renderWalker();
   await loadMemories();
+  history.replaceState(null, "", `?building=${encodeURIComponent(bid)}`);
+  state.ready = true;   // plan + memories loaded (tests wait on this)
+}
+$("building").addEventListener("change", (e) => loadBuilding(e.target.value));
+
+// ---------- boot ----------
+async function boot() {
+  const buildings = await (await fetch("/api/buildings")).json();
+  for (const b of buildings) {
+    const o = document.createElement("option");
+    o.value = b.id;
+    o.textContent = `${b.kind === "interior" ? "Indoors" : "Yard"} — ${b.name}`;
+    $("building").appendChild(o);
+  }
+  const want = new URLSearchParams(location.search).get("building");
+  const pick = buildings.find((b) => b.id === want) || buildings.find((b) => b.default) || buildings[0];
+  await loadBuilding(pick.id);
   requestAnimationFrame(tick);
 }
 boot();

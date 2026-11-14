@@ -148,7 +148,11 @@ def main():
                      bottom_m=round(o["lowerElevation"], 2), center=midpoint(e, o, vpos))
                 for e in edges.values() for o in e.get("openings") or []]
 
-    geo = (cap.get("GetModelViewPrefetch") or {}).get("data", {}).get("model", {}).get("geocoordinates")
+    vm = (cap.get("GetModelViewPrefetch") or {}).get("data", {}).get("model", {})
+    entry = (((vm.get("options") or {}).get("entryAnimationOptions") or {}).get("entrySweep") or {}).get("id")
+    start_sweep = next((l["index"] for l in locs if l["pano"].get("sweepUuid") == entry), locs[0]["index"])
+    print(f"start sweep (the showcase's own entry point): {start_sweep}")
+    geo = vm.get("geocoordinates")
     georef = None
     if geo:
         # Checked by eye against a Vexcel ortho (spike/interior_georef_check.py): east,north = R(theta) p + t,
@@ -163,6 +167,7 @@ def main():
     out = dict(
         building=dict(model_id=MODEL, id=MODEL, name=cap.get("title", MODEL),
                       lat=geo and geo["latitude"], lon=geo and geo["longitude"]),
+        start_sweep=start_sweep,
         sweeps=sweeps, walkable=walkable, hazards=[], rooms=rooms, openings=openings,
         walls=[dict(a=vpos[e["vertices"][0]["id"]], b=vpos[e["vertices"][1]["id"]], type=e["type"],
                     thickness=e.get("thickness")) for e in edges.values()],

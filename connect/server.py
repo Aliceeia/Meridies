@@ -40,7 +40,21 @@ import sys  # noqa: E402
 sys.path.insert(0, str(HERE.parent))
 from connect.backend import describe as desc  # noqa: E402
 
-DEFAULT_BUILDING = "1PVeAYmPNJz"  # the yard; PART 5 switches the default to the interior
+DEFAULT_BUILDING = "zvKHR9DHNjJ"  # the interior scan; the yard (1PVeAYmPNJz) is the second building
+VIEW_LOCK = __import__("threading").Lock()  # one headless render at a time
+
+
+def view_png(bid: str, sweep: int, heading_deg: float) -> bytes:
+    """First-person view at a sweep, heading snapped to the nearest of the 4 pre-rendered yaws."""
+    import math as _m
+    from connect.backend.interior_render import Renderer
+    k = round(((-heading_deg) % 360) / 90) % 4          # map heading is clockwise, showcase yaw counter-clockwise
+    with VIEW_LOCK, Renderer(model=bid) as r:
+        jpg = r.cache_path(sweep + 1, f"0.000,{k * _m.pi / 2:.3f}").with_suffix(".jpg")
+        if not jpg.exists():                              # ~10x smaller than the PNG master
+            from PIL import Image
+            Image.open(io.BytesIO(r.render_view(sweep, k * _m.pi / 2))).convert("RGB").save(jpg, "JPEG", quality=85)
+        return jpg.read_bytes()
 
 
 def load(mid):
@@ -107,6 +121,22 @@ class Handler(BaseHTTPRequestHandler):
             fp = desc.load_plan(bid)
             fp.pop("meta", None)
             return self.send(200, fp)
+        if parts == ["api", "view"]:
+            bid = q.get("building") or DEFAULT_BUILDING
+            if desc.BUILDINGS.get(bid, ("", ""))[1] != "interior":
+                return self.err(404, "no first-person views for this building")
+            try:
+                png = view_png(bid, int(q["sweep"]), float(q.get("heading", 0)))
+            except (KeyError, ValueError) as e:
+                return self.err(400, f"bad request: {e}")
+            except TimeoutError as e:
+                return self.err(504, str(e))
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(png)))
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            return self.wfile.write(png)
         if parts == ["api", "buildings"]:
             out = []
             for bid in desc.BUILDINGS:

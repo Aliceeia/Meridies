@@ -51,15 +51,21 @@ class Renderer:
         self.model, self.timeout_s = model, timeout_s
 
     def __enter__(self):
-        from playwright.sync_api import sync_playwright
-        self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(channel="chrome", headless=True, args=[
-            "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
+        self._pw = self._browser = None   # launched lazily: a cache hit never starts Chrome
         return self
 
+    def _ensure_browser(self):
+        if self._browser is None:
+            from playwright.sync_api import sync_playwright
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch(channel="chrome", headless=True, args=[
+                "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
+        return self._browser
+
     def __exit__(self, *exc):
-        self._browser.close()
-        self._pw.stop()
+        if self._browser is not None:
+            self._browser.close()
+            self._pw.stop()
 
     def cache_path(self, ss: int, sr: str) -> Path:
         return CACHE / f"{self.model}_ss{ss}_sr{sr}.png"
@@ -70,7 +76,7 @@ class Renderer:
         path = self.cache_path(ss, sr)
         if path.exists():
             return path.read_bytes()
-        page = self._browser.new_page(viewport={"width": VIEW_W, "height": VIEW_H})
+        page = self._ensure_browser().new_page(viewport={"width": VIEW_W, "height": VIEW_H})
         try:
             page.goto(view_url(self.model, ss, sr), wait_until="domcontentloaded", timeout=60_000)
             page.wait_for_selector("canvas", timeout=30_000)

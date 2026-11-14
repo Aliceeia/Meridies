@@ -35,8 +35,8 @@ with sync_playwright() as pw:
     page = b.new_page(viewport={"width": 1500, "height": 950})
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: m.type == "error" and errors.append(m.text))
-    page.goto(URL)
-    page.wait_for_function("() => state.plan && document.getElementById('memCount')")
+    page.goto(URL + ("?building=zvKHR9DHNjJ" if STEP == "6" else "?building=1PVeAYmPNJz"))
+    page.wait_for_function("() => state.ready === true")
     n0 = page.evaluate("state.memories.length")
     print("memories visible at start:", n0)
 
@@ -132,6 +132,45 @@ with sync_playwright() as pw:
         print("user-b hears it after confirming:", page.inner_text("#nearWhere"))
         assert page.query_selector(f"#mem-{m['id']} >> text=Make private") is None, "non-author got a visibility toggle"
         page.screenshot(path=str(OUT / "step5_userb.png"))
+
+    if STEP == "6":   # interior: sweep-to-sweep walking + first-person view + memory at a sweep
+        page.wait_for_function("() => state.plan.kind === 'interior'")
+        print("start sweep:", page.evaluate("state.walker.sweep"), "|", page.inner_text("#zone"))
+        page.wait_for_function("() => document.getElementById('viewImg').complete && !document.getElementById('viewImg').classList.contains('loading')", timeout=60_000)
+        src0 = page.evaluate("document.getElementById('viewImg').src")
+        page.screenshot(path=str(OUT / "step6_start.png"))
+        # turn to face -X (heading 270: toward the dining room), then step forward
+        page.evaluate("state.walker.heading = 270; renderWalker()")
+        page.mouse.click(5, 5)
+        page.keyboard.press("ArrowUp")
+        page.wait_for_function("() => state.target === null && state.walker.sweep !== 4", timeout=20_000)
+        s1 = page.evaluate("state.walker.sweep")
+        nb = page.evaluate("sweepAt(4).neighbours")
+        print("ArrowUp moved to sweep", s1, "| a neighbour of 4:", s1 in nb, "|", page.inner_text("#zone"))
+        assert s1 in nb
+        page.wait_for_function(f"() => document.getElementById('viewImg').src !== {src0!r} && !document.getElementById('viewImg').classList.contains('loading')", timeout=60_000)
+        print("view updated:", page.inner_text("#viewCap"))
+        # a non-neighbour click is refused
+        far = page.evaluate("state.plan.sweeps.find(s => s.index !== state.walker.sweep && !sweepAt(state.walker.sweep).neighbours.includes(s.index)).index")
+        page.evaluate(f"goToSweep({far})")
+        assert page.evaluate("state.target") is None, "jumped to a non-neighbour"
+        # record a memory here
+        page.click("#rec")
+        page.wait_for_selector("body.recording", timeout=5000)
+        page.wait_for_function("() => !document.body.classList.contains('recording')", timeout=20_000)
+        page.wait_for_function(f"() => state.memories.some(m => m.sweep === {s1})", timeout=10_000)
+        m = page.evaluate(f"state.memories.filter(m => m.sweep === {s1}).pop()")
+        print("memory:", {k: m.get(k) for k in ("building_id", "sweep", "heading_deg", "position", "visibility")})
+        # walk away two steps and come back: chime prompt, panner direction
+        page.evaluate("state.walker.heading = 90; renderWalker()")
+        for _ in range(3):
+            page.keyboard.press("ArrowUp")
+            page.wait_for_function("() => state.target === null", timeout=20_000)
+        d_away = page.evaluate(f"relative(memById({m['id']!r})).dist")
+        print(f"walked to sweep {page.evaluate('state.walker.sweep')}, {d_away:.1f} m from the memory")
+        page.wait_for_function("() => !document.getElementById('viewImg').classList.contains('loading')", timeout=60_000)
+        print("view at the end:", page.inner_text("#viewCap"), "| src:", page.evaluate("document.getElementById('viewImg').src").split("?")[1])
+        page.screenshot(path=str(OUT / "step6_interior.png"))
 
     b.close()
 
