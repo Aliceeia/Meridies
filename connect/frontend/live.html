@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridies Hat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23ff6b5e'/%3E%3C/svg%3E">
+<style>
+  :root { --bg: #0f0d0c; --panel: #1c1815; --line: #3a322b; --text: #f4ede4; --dim: #b3a596; --faint: #7d7064;
+          --ok: #9fd8b4; --warn: #f2c879; --urgent: #ff6b5e; --rec: #ff6b5e; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.45 ui-rounded, "Segoe UI", system-ui, sans-serif; }
+  button, select { font: inherit; padding: 10px 16px; border-radius: 14px; border: 1px solid var(--line); background: #2a241f; color: var(--text); cursor: pointer; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--warn); outline-offset: 2px; }
+  header { display: flex; align-items: center; gap: 14px; padding: 16px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 21px; } header h1 span { color: var(--rec); }
+  header .grow { flex: 1; } header a { color: var(--dim); }
+  main { max-width: 980px; margin: 0 auto; padding: 22px 24px 60px; display: grid; gap: 20px; grid-template-columns: 1fr 1fr; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px; }
+  h2 { margin: 0 0 12px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .wide { grid-column: 1 / -1; }
+
+  /* status board */
+  #board { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: center; }
+  #radar { width: 220px; height: 220px; }
+  #state { font-size: 30px; font-weight: 700; }
+  #state.clear { color: var(--ok); } #state.warn { color: var(--warn); } #state.urgent { color: var(--urgent); }
+  #stateLine { color: var(--dim); margin-top: 4px; min-height: 1.4em; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .chip { font-size: 14px; padding: 3px 11px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); }
+  .chip.on { color: var(--ok); border-color: rgba(159,216,180,.5); } .chip.off { color: var(--faint); }
+  .chip.busy { color: var(--warn); border-color: rgba(242,200,121,.5); }
+
+  #rec { width: 100%; padding: 26px; font-size: 26px; font-weight: 700; border: 0; border-radius: 22px;
+         background: linear-gradient(180deg, #ff7b6e, #e9483c); color: #fff; }
+  #rec.recording { background: #2a1d1b; border: 3px solid var(--rec); }
+  #recLine { text-align: center; margin-top: 10px; min-height: 1.5em; color: var(--dim); }
+  #ctx { width: 100%; padding: 18px; font-size: 20px; }
+  #ctxLine { margin-top: 10px; color: var(--dim); min-height: 1.5em; }
+  label.row { display: flex; gap: 10px; align-items: center; margin: 8px 0; color: var(--dim); }
+  label.row select { flex: 1; min-width: 0; }
+  video { width: 100%; border-radius: 12px; background: #000; margin-top: 10px; aspect-ratio: 4/3; object-fit: cover; }
+  .key { font-size: 13px; color: var(--faint); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-left: 6px; font-weight: 400; }
+  #queue li { color: var(--dim); font-size: 15px; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } #board { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Meridies <span>Hat</span> · live</h1>
+  <span class="grow"></span>
+  <a href="/">Gallery</a>
+</header>
+<main>
+  <section class="wide" aria-labelledby="boardTitle">
+    <h2 id="boardTitle">Status</h2>
+    <div id="board">
+      <svg id="radar" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+      <div>
+        <div id="state" class="clear" role="status" aria-live="polite">Clear</div>
+        <div id="stateLine"></div>
+        <div class="chips">
+          <span class="chip off" id="chipHat">No hat data</span>
+          <span class="chip off" id="chipNet">Checking connection…</span>
+          <span class="chip" id="chipQueue">Nothing waiting to upload</span>
+        </div>
+        <label class="row" style="margin-top:14px"><input type="checkbox" id="demoWarn"> Demo: hat is warning (memory sounds and recording stop)</label>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="recTitle">
+    <h2 id="recTitle">Leave a memory</h2>
+    <button id="rec">● Record 10 seconds <span class="key">R</span></button>
+    <div id="recLine" role="status" aria-live="polite"></div>
+    <label class="row">I'm in <select id="building" aria-label="Building"></select></label>
+    <label class="row">at <select id="spot" aria-label="Spot"></select></label>
+    <div style="font-size:14px;color:var(--faint)">You choose where you are. The hat never tracks where you walk.</div>
+  </section>
+
+  <section aria-labelledby="ctxTitle">
+    <h2 id="ctxTitle">Camera</h2>
+    <button id="ctx">👁 What's around me? <span class="key">C</span></button>
+    <div id="ctxLine" role="status" aria-live="polite"></div>
+    <label class="row"><input type="checkbox" id="camOn"> Camera on (a frame goes with each recording, as its cover)</label>
+    <video id="cam" autoplay muted playsinline hidden></video>
+  </section>
+
+  <section class="wide" id="queueBox" hidden aria-labelledby="queueTitle">
+    <h2 id="queueTitle">Saved on this device, waiting to upload</h2>
+    <ul id="queue"></ul>
+  </section>
+</main>
+<script src="/live.js"></script>
+</body>
+</html>

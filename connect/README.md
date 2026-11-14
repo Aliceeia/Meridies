@@ -1,5 +1,32 @@
 # connect/ — the memory layer
 
+Two halves, connected by one thing only: a saved recording.
+
+| Page | What |
+|---|---|
+| `/live` | The hat. Status board (the obstacle list from `integration/` on ZeroMQ 5556; tones come from `audio/engine.py`), 10 s recording, camera context on demand, demo warning switch. Works with no network: the page is cached by `sw.js`, recordings go to IndexedDB first and upload whenever the server answers. You choose where you are; nothing tracks you. |
+| `/` | The gallery. Places (derived from saved memories), each a timeline of memory cards: cover, one-line transcript, Play, description behind "show text", visibility badge. **L** = listen mode (screen dark; ← → places, ↑ ↓ memories, Space play, D describe, T take me there, H help). |
+| `/f/<token>` | Family view: only the owner's `family` memories, read-only. Made and turned off from the gallery's "Family link". |
+| `/walk` | The 3D walk ("Take me there": `/walk?building=&memory=` stands you a few steps from the memory, facing it; first key chimes it). |
+
+### Gallery rules (enforced by the server, tested in `tests/test_gallery_server.py`)
+
+- `visibility`: `private` (default) | `family` | `community`. Only the author changes it. `community` is only ever a
+  pending-review request in a public space (no browsing UI yet). Private audio, covers and images answer 403 to
+  everyone else.
+- A place exists only because a visible memory was saved there: places are computed per request (building + room,
+  or yard zone) from what that viewer may see. No visits, paths or dwell times are stored anywhere.
+- After each save one background worker fills in: Gemini transcript (ffmpeg → mp3), cover image (hat camera frame,
+  else the first-person scan render at that sweep and heading, else the drone-scan crop for the yard), description.
+- Hat buttons: `POST /api/hat/button {"button": "left|right|up|down|play|describe|there|help|listen"}` drives listen
+  mode in any open gallery page (SSE `/api/hat/events`). Only the button name travels.
+
+Tests: `pytest connect/tests/test_gallery_server.py connect/tests/test_sharing_server.py`,
+`python connect/tests/e2e_gallery.py listen`, `python connect/tests/e2e_live.py` (both run their own server on a
+scratch copy; your memories are not touched).
+
+## The walk (original memory layer)
+
 Arrive at a place → record (until you stop) → hear it back → keep it private (default) → come back later → hear it
 from that direction → optionally an AI description of the place from aerial + drone imagery.
 

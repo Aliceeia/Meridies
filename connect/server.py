@@ -275,6 +275,47 @@ def hat_broadcast(button: str) -> int:
         return len(HAT_CLIENTS)
 
 
+# ---------- /live: relay the hat's obstacle list (ZeroMQ, port 5556) to the realtime page ----------
+# Only the LATEST frame is held in memory, for display; nothing is written anywhere.
+LIVE = {"warnings": [], "t": 0.0, "source": "none"}
+LIVE_COND = threading.Condition()
+HAT_ENDPOINT = os.environ.get("MERIDIES_HAT_ENDPOINT", "tcp://127.0.0.1:5556")
+
+
+def start_hat_relay():
+    try:
+        import zmq
+    except ImportError:
+        print("  /live: pyzmq not installed, no obstacle relay", flush=True)
+        return
+
+    def run():
+        import time as _t
+        s = zmq.Context.instance().socket(zmq.SUB)
+        s.setsockopt(zmq.CONFLATE, 1)
+        s.setsockopt_string(zmq.SUBSCRIBE, "")
+        s.setsockopt(zmq.RCVTIMEO, 1000)
+        s.connect(HAT_ENDPOINT)
+        while True:
+            try:
+                w = json.loads(s.recv())
+            except zmq.Again:
+                continue
+            except ValueError:
+                continue
+            with LIVE_COND:
+                LIVE.update(warnings=w if isinstance(w, list) else [], t=_t.time(), source="hat")
+                LIVE_COND.notify_all()
+    threading.Thread(target=run, daemon=True, name="hat-relay").start()
+    print(f"  /live: listening for the hat on {HAT_ENDPOINT}", flush=True)
+
+
+LIVE_PROMPT = ("This photo is from a camera on a blind person's hat, looking where they face. In one or two short "
+               "sentences, say what is directly ahead and anything close on the left or right that matters for "
+               "walking or for knowing where they are. Body-relative only (ahead, left, right), never compass "
+               "directions. No colours. English.")
+
+
 def gallery(q: dict) -> dict:
     """Places with their memories, computed from what this viewer may see right now.
     Author: all of their own memories. Family link: ONLY the owner's family memories."""
@@ -350,6 +391,25 @@ class Handler(BaseHTTPRequestHandler):
             with HAT_LOCK:
                 HAT_CLIENTS.remove(q)
 
+    def live_stream(self):
+        """Server-sent events for /live: the hat's current obstacle list, on change and at least once a second."""
+        import time as _t
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            while True:
+                with LIVE_COND:
+                    LIVE_COND.wait(timeout=1.0)
+                    snap = dict(LIVE)
+                fresh = bool(snap["t"]) and _t.time() - snap["t"] < 2
+                msg = {"warnings": snap["warnings"] if fresh else [], "connected": fresh}
+                self.wfile.write(f"data: {json.dumps(msg)}\n\n".encode())
+                self.wfile.flush()
+        except (ConnectionError, OSError):
+            pass
+
     # routes
     def do_GET(self):
         u = urlparse(self.path)
@@ -402,6 +462,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, gallery(q))
         if parts == ["api", "hat", "events"]:
             return self.hat_events()
+        if parts == ["api", "live", "stream"]:
+            return self.live_stream()
         if parts == ["api", "family-link"]:
             tok = family_link_for(q.get("viewer", ""), create=False) if q.get("viewer") else None
             return self.send(200, {"token": tok, "url": f"/f/{tok}" if tok else None})
@@ -461,6 +523,10 @@ class Handler(BaseHTTPRequestHandler):
                         reports=[],   # reserved for listener reports (not implemented yet)
                         description=None, transcript={"status": "pending"}, audio_type=ctype, audio_file=fname)
             try:  # optional: where the person faced, and which sweep they stood at (interior)
+                if q.get("recorded_at"):   # saved offline on the hat, uploaded later: keep when it was said
+                    ra = datetime.fromisoformat(q["recorded_at"].replace("Z", "+00:00"))
+                    if ra.tzinfo and ra <= datetime.now(timezone.utc):
+                        meta["created_at"] = ra.astimezone(timezone.utc).isoformat(timespec="seconds")
                 if "heading_deg" in q:
                     meta["heading_deg"] = round(float(q["heading_deg"]) % 360, 1)
                 if q.get("sweep", "") != "":
@@ -499,6 +565,22 @@ class Handler(BaseHTTPRequestHandler):
                 update(m["id"], lambda m: m.__setitem__("transcript", {"status": "pending"}))
             WORKER.submit(process, m["id"])
             return self.send(202, {"queued": m["id"]})
+        if parts == ["api", "live", "context"]:
+            # camera context on demand: one frame in, one or two spoken sentences out. The frame is not kept.
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= MAX_FRAME:
+                return self.err(400, "frame missing or larger than 3 MB")
+            data = self.rfile.read(n)
+            if data[:2] != b"\xff\xd8":
+                return self.err(400, "not a JPEG")
+            from connect.backend import gemini
+            try:
+                text = gemini.generate([{"text": LIVE_PROMPT}, gemini.image_part(data)], timeout=15, retries=1)
+            except LookupError as e:
+                return self.err(503, str(e))
+            except (urllib.error.URLError, TimeoutError, KeyError, IndexError) as e:
+                return self.err(502, f"couldn't describe: {e!r}"[:200])
+            return self.send(200, {"text": text})
         if parts == ["api", "hat", "button"]:
             req = json.loads(self.body() or b"{}")
             if req.get("button") not in HAT_BUTTONS:
@@ -579,5 +661,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"memory layer on http://localhost:{PORT}")
+    print(f"memory layer on http://localhost:{PORT}   gallery /   hat /live   walk /walk")
+    start_hat_relay()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
