@@ -1,0 +1,2 @@
+vl53l5cx-ctypes==0.0.3
+pyzmq

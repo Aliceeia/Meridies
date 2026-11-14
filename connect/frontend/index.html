@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridies Memories</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23f2c879'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #14110f; --panel: #1c1815; --line: #3a322b; --text: #f4ede4; --dim: #b3a596; --faint: #7d7064;
+    --glow: #f2c879; --glow2: #ffdca8; --shared: #9fd8b4; --rec: #ff6b5e;
+    /* names the existing map code uses */
+    --walk: #f2c879; --zone: #e3b341; --walker: #ffffff; --mem: #f2c879; --community: #9fd8b4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 18px/1.45 ui-rounded, "Segoe UI", system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: 7fr 3fr; height: 100vh; }
+
+  /* ---------- the place ---------- */
+  #stage { position: relative; min-width: 0; overflow: hidden; background: #000; }
+  .scene { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; transition: opacity .6s ease; }
+  .scene.back { opacity: 0; pointer-events: none; }
+  #markers { position: absolute; inset: 0; pointer-events: none; transition: opacity .4s; }
+  #markers.stale { opacity: .15; }
+  .memdot { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: auto; cursor: pointer;
+    background: radial-gradient(circle, var(--glow2) 0 18%, rgba(242,200,121,.55) 32%, rgba(242,200,121,0) 70%);
+    animation: breathe 3.2s ease-in-out infinite; transition: left .25s linear, top .25s linear, width .4s, height .4s, opacity .4s; }
+  .memdot.shared { background: radial-gradient(circle, #e6fff0 0 18%, rgba(159,216,180,.55) 32%, rgba(159,216,180,0) 70%); }
+  .memdot.landed { animation: landed 1.6s ease-out 1, breathe 3.2s ease-in-out 1.6s infinite; }
+  @keyframes breathe { 50% { filter: brightness(1.35); transform: translate(-50%, -50%) scale(1.08); } }
+  @keyframes landed { 0% { transform: translate(-50%,-50%) scale(.2); filter: brightness(3); }
+    35% { transform: translate(-50%,-50%) scale(2.2); filter: brightness(2); } 100% { transform: translate(-50%,-50%) scale(1); } }
+  .edgecue { position: absolute; bottom: 22%; padding: 6px 12px; border-radius: 99px; background: rgba(20,17,15,.55);
+    color: var(--glow2); font-size: 15px; pointer-events: none; backdrop-filter: blur(4px); }
+  #pad { position: absolute; left: 20px; bottom: 20px; display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; }
+  #pad button { width: 52px; height: 52px; padding: 0; font-size: 22px; border-radius: 14px; background: rgba(20,17,15,.6);
+    border: 1px solid rgba(255,255,255,.18); color: var(--text); backdrop-filter: blur(6px); }
+  #desync { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+    background: rgba(20,17,15,.75); padding: 8px 10px 8px 16px; border-radius: 99px; font-size: 16px; backdrop-filter: blur(6px); }
+  #desync[hidden] { display: none; }
+  #mapwrap { position: absolute; inset: 0; }
+  #mapwrap[hidden] { display: none; }
+  svg#map { width: 100%; height: 100%; display: block; background: #000; cursor: crosshair; }
+  .sweep { cursor: pointer; }
+  #toast { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); background: rgba(20,17,15,.85);
+    padding: 10px 18px; border-radius: 12px; font-size: 18px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+
+  /* ---------- the three things ---------- */
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 28px 24px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 26px; }
+  .where { color: var(--dim); font-size: 16px; }
+  .where b { color: var(--text); font-weight: 600; }
+  h2 { font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
+  button, select { font: inherit; font-size: 17px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line);
+    background: #2a241f; color: var(--text); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--dim); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  #nearby { border-radius: 18px; padding: 16px 18px; background: radial-gradient(120% 140% at 0% 0%, rgba(242,200,121,.18), transparent 60%), #241f1a;
+    border: 1px solid rgba(242,200,121,.35); }
+  #nearby[hidden] { display: none; }
+  #nearWhere { font-size: 22px; font-weight: 600; margin-bottom: 12px; }
+  #listen { background: var(--glow); color: #241a0c; border: 0; font-weight: 700; font-size: 19px; padding: 12px 22px; }
+
+  #memList { display: flex; flex-direction: column; gap: 10px; }
+  .mem { border-radius: 14px; padding: 12px 14px; background: #221d19; border: 1px solid var(--line); }
+  .mem.near { border-color: rgba(242,200,121,.6); }
+  .mem.far-hidden { display: none; }
+  .mem .dist { font-size: 18px; font-weight: 600; }
+  .mem .meta { color: var(--dim); font-size: 14px; }
+  .mem .actions:empty { display: none; }
+  .mem .actions { margin-top: 8px; }
+  .mem .actions button { font-size: 14px; padding: 6px 10px; border-radius: 10px; }
+  .mem .desc p { font-size: 16px; }
+  #more { color: var(--faint); font-size: 15px; }
+
+  #rec { width: 100%; padding: 22px; font-size: 24px; font-weight: 700; border-radius: 20px; border: 0;
+    background: linear-gradient(180deg, #ff7b6e, #e9483c); color: #fff; box-shadow: 0 8px 30px rgba(255,107,94,.25); }
+  body.recording #rec { display: none; }
+  /* while recording, Stop takes exactly the place and size of the Record button */
+  #recStop { width: 100%; padding: 22px; font-size: 24px; font-weight: 700; border-radius: 20px;
+    background: #2a1d1b; border: 3px solid var(--rec); color: #fff; }
+  #recStop[hidden] { display: none; }
+  /* the question covers the whole right panel: three big touch areas, fixed order, no small buttons */
+  #decide { position: fixed; top: 0; right: 0; bottom: 0; width: 30%; min-width: 320px; z-index: 800; background: var(--panel);
+    border-left: 1px solid var(--line); padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+  #decide[hidden] { display: none; }
+  #decide h2 { font-size: 22px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 6px; line-height: 1.3; }
+  #decide .opt { flex: 1 1 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px;
+    text-align: left; padding: 20px 22px; border-radius: 22px; border: 2px solid var(--line); background: #241f1a; min-height: 110px; }
+  #decide .opt[hidden] { display: none; }
+  #decide .opt:focus-visible { outline: 4px solid var(--glow); outline-offset: 2px; }
+  #decide .opt .ic { font-size: 30px; }
+  #decide .opt .t { font-size: 26px; font-weight: 700; }
+  #decide .opt .n { font-size: 16px; color: var(--dim); }
+  #decide .opt[data-choice="private"] { border-color: var(--glow); }
+  .mem .badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 1px 8px; border-radius: 6px;
+    border: 1px solid currentColor; margin-right: 6px; }
+  #recState { display: block; text-align: center; margin-top: 10px; font-size: 20px; color: var(--rec); min-height: 1.4em; }
+  body.recording aside { box-shadow: inset 6px 0 0 var(--rec); }
+  .recnote { color: var(--faint); font-size: 14px; text-align: center; margin-top: 6px; }
+  .pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  #whereami { width: 100%; padding: 16px; font-size: 19px; border-radius: 16px; }
+  #whereText { margin-top: 10px; font-size: 17px; color: var(--dim); }
+
+  details#debug { margin-top: auto; color: var(--dim); font-size: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  details#debug summary { cursor: pointer; color: var(--faint); }
+  details#debug .dbg { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  details#debug select, details#debug button { font-size: 14px; padding: 6px 10px; }
+  #debugMap { height: 260px; position: relative; border-radius: 10px; overflow: hidden; background: #000; }
+  #view { margin: 0; } #view img { width: 100%; border-radius: 8px; } #view figcaption { font-size: 13px; }
+  .tag { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 99px; border: 1px solid currentColor; }
+  .tag.private { color: var(--glow); } .tag.community { color: var(--shared); }
+  /* text is for the sighted judge: collapsed to one line until opened */
+  .mem .desc { display: none; }
+  .mem.textopen .desc { display: block; }
+  .showtext { background: none; border: 0; padding: 4px 0; color: var(--faint); font-size: 14px; }
+  .showtext:hover { color: var(--dim); }
+  #blindBtn { width: 100%; padding: 14px; font-size: 18px; border-radius: 16px; background: #0b0908; }
+  .key { font-size: 12px; color: var(--faint); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+  /* blindfold: everything goes dark except one line */
+  #blind { position: fixed; inset: 0; z-index: 1000; background: #000; display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 6vh; color: #6d625a; font-size: 18px; letter-spacing: .02em; cursor: none; }
+  #blind[hidden] { display: none; }
+  #report { position: fixed; inset: 0; z-index: 900; background: rgba(10,8,7,.82); display: flex; align-items: center; justify-content: center; }
+  #report[hidden] { display: none; }
+  #report .card { width: min(880px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 26px; }
+  #report h3 { margin: 0 0 14px; font-size: 22px; }
+  #reportMap { width: 100%; height: 52vh; background: #14110f; border-radius: 14px; display: block; }
+  #reportLine { font-size: 20px; margin: 16px 0; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; color: var(--dim); font-size: 14px; margin-top: 10px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; } }
+</style>
+</head>
+<body>
+<main>
+  <section id="stage" aria-label="The place">
+    <iframe id="sc0" class="scene" title="3D view of the place" allow="xr-spatial-tracking; fullscreen" hidden></iframe>
+    <iframe id="sc1" class="scene back" title="3D view of the place (loading)" allow="xr-spatial-tracking; fullscreen" hidden></iframe>
+    <div id="markers" aria-hidden="true"></div>
+    <div id="mapwrap" hidden><svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Walk map"></svg></div>
+    <div id="desync" hidden><span>You looked around on your own — memory lights paused.</span><button id="resync">Re-sync</button></div>
+    <div id="pad" aria-label="Walk">
+      <span></span><button id="padUp" aria-label="Step forward">↑</button><span></span>
+      <button id="padLeft" aria-label="Turn left">↶</button><button id="padDown" aria-label="Step back">↓</button><button id="padRight" aria-label="Turn right">↷</button>
+    </div>
+    <div id="toast" role="status"></div>
+  </section>
+
+  <aside>
+    <div class="where" id="whereLine">Loading the place…</div>
+
+    <section id="nearby" hidden aria-live="polite">
+      <div id="nearWhere"></div>
+      <div class="row">
+        <button id="listen">▶ Listen</button>
+        <button id="stopVoice" hidden>■ Stop</button>
+        <button id="dismiss">Not now</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Memories near you</h2>
+      <div id="memList"></div>
+      <div id="more"></div>
+    </section>
+
+    <section>
+      <button id="rec">● Leave a memory here</button>
+      <button id="recStop" hidden aria-label="Stop recording. You can also press R or Enter.">■ Stop recording <span class="key">R</span></button>
+      <span id="recState" role="status" aria-live="polite"></span>
+      <div class="recnote">Records only when you press, until you stop it. Private until you share it.</div>
+    </section>
+
+    <section>
+      <button id="whereami">Where am I?</button>
+      <div id="whereText" aria-live="polite"></div>
+    </section>
+
+    <section>
+      <button id="blindBtn">◐ Blindfold <span class="key">space</span></button>
+    </section>
+
+    <details id="debug">
+      <summary>debug</summary>
+      <div class="dbg">
+        <div><b id="bname"></b> <span id="baddr"></span></div>
+        <label class="row">Building <select id="building"></select></label>
+        <label class="row">Listening as <select id="user"><option value="user-a">User A</option><option value="user-b">User B</option></select></label>
+        <label class="row"><input type="checkbox" id="hat"> Hat is warning (memory audio muted) — <code>setHatWarning()</code></label>
+        <div>heading <span id="hdg">000</span>° · <span id="zone"></span> · <span id="pos"></span> · <span id="memCount">0</span> memories</div>
+        <div id="debugMap"></div>
+        <figure id="view" hidden><img id="viewImg" alt="Pre-rendered view"><figcaption id="viewCap"></figcaption></figure>
+      </div>
+    </details>
+  </aside>
+</main>
+<div id="decide" role="dialog" aria-modal="true" aria-labelledby="decideTitle" hidden>
+  <h2 id="decideTitle">Saved. Keep it private, or share with the community?</h2>
+  <!-- fixed positions, fixed order; "share" exists only in public spaces -->
+  <button class="opt" data-choice="private"><span class="ic" aria-hidden="true">🔒</span><span class="t"></span><span class="n"></span></button>
+  <button class="opt" data-choice="share"><span class="ic" aria-hidden="true">👥</span><span class="t"></span><span class="n"></span></button>
+  <button class="opt" data-choice="later"><span class="ic" aria-hidden="true">⏳</span><span class="t"></span><span class="n"></span></button>
+</div>
+<div id="blind" hidden><div>Listening. Press <b>SPACE</b> to see.</div></div>
+<div id="report" hidden role="dialog" aria-labelledby="reportLine">
+  <div class="card">
+    <h3>Your walk, blindfolded</h3>
+    <svg id="reportMap" xmlns="http://www.w3.org/2000/svg" aria-label="Path walked without sight"></svg>
+    <div class="legend"><span><i style="background:#9fd8b4"></i>start</span><span><i style="background:#ff6b5e"></i>end</span>
+      <span><i style="background:var(--glow)"></i>memory found by sound</span><span><i style="background:#5a5048"></i>missed</span>
+      <span><i style="border:2px solid #fff;background:none"></i>listened</span></div>
+    <p id="reportLine"></p>
+    <button id="reportClose">Done</button>
+  </div>
+</div>
+<script src="app.js"></script>
+<script src="experience.js"></script>
+<script src="after_record.js"></script>
+<script src="after_record_ui.js"></script>
+<script src="voice.js"></script>
+</body>
+</html>
