@@ -5,3 +5,7 @@ audio/sounds/
 audio/preview.wav
 *.log
 .DS_Store
+connect/data/cache/
+connect/data/memories/
+.env
+.pytest_cache/
