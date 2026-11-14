@@ -53,12 +53,16 @@ last_model = None  # the model that produced the most recent answer
 def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: int = 60, fallback: bool = True) -> str:
     """parts: list of {"text": ...} or image_part(...). Returns the text answer.
     On quota (429) or overload (503) it retries, then moves to the next model in FALLBACKS."""
-    global last_model
+    global last_model, _preferred
     body = {"contents": [{"role": "user", "parts": parts}]}
     if json_out:
         body["generationConfig"] = {"responseMimeType": "application/json"}
     data = json.dumps(body).encode()
-    models = [model_name()] + ([m for m in FALLBACKS if m != model_name()] if fallback else [])
+    chain = [model_name()] + ([m for m in FALLBACKS if m != model_name()] if fallback else [])
+    if _preferred in chain:          # the model that answered last time goes first
+        chain.remove(_preferred); chain.insert(0, _preferred)
+    now = time.monotonic()
+    models = [m for m in chain if _skip_until.get(m, 0) <= now] or chain   # skip models that just failed
     err = None
     for m in models:
         req = urllib.request.Request(
@@ -68,20 +72,27 @@ def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: 
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as r:
                     out = json.loads(r.read())
-                last_model = m
+                last_model = _preferred = m
                 return " ".join(p.get("text", "") for p in out["candidates"][0]["content"]["parts"]).strip()
             except urllib.error.HTTPError as e:
                 err = e
                 if e.code == 503 and attempt < retries - 1:
-                    time.sleep(5 * (attempt + 1))
+                    time.sleep(3)
                     continue
                 if e.code in (429, 503, 404):
-                    break          # quota, overload, or model not offered to this key: next model
+                    # quota (skip 1 h), overload (skip 5 min), or not offered to this key (skip 1 day)
+                    _skip_until[m] = time.monotonic() + {429: 3600, 503: 300, 404: 86400}[e.code]
+                    break
                 raise
             except (TimeoutError, urllib.error.URLError) as e:
                 err = e
-                break              # this model hung: try the next one rather than failing the user
+                _skip_until[m] = time.monotonic() + 300   # this model hung: skip it for 5 minutes
+                break
     raise err
+
+
+_skip_until: dict[str, float] = {}
+_preferred: str | None = None
 
 
 if __name__ == "__main__":

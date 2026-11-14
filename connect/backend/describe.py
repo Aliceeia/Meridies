@@ -142,10 +142,15 @@ def first_person(bid: str, sweep: int, heading_deg: float) -> bytes:
     """Eye-level render facing the heading (map heading is clockwise; showcase yaw is counter-clockwise)."""
     from PIL import Image
     from .interior_render import Renderer
+    # Speed: use the pre-rendered view nearest the heading (4 per sweep, already cached) instead of
+    # starting a headless browser for the exact angle (15-40 s). Error is at most 45 degrees.
+    k = round(((-heading_deg) % 360) / 90) % 4
     with Renderer(model=bid) as r:
-        png = r.render_view(sweep, -math.radians(heading_deg))
+        png = r.render_view(sweep, k * math.pi / 2)
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    img.thumbnail((960, 960))
     out = io.BytesIO()
-    Image.open(io.BytesIO(png)).convert("RGB").save(out, "JPEG", quality=88)
+    img.save(out, "JPEG", quality=80)
     return out.getvalue()
 
 
@@ -161,10 +166,15 @@ def describe(m: dict, mem_dir: Path) -> dict:
     heading = float(m.get("heading_deg") or 0.0)
     lat, lon = to_latlon(fp, x, y)
 
+    import time as _t
+    t0 = _t.monotonic()
+
     def cached(kind, make):
         p = mem_dir / f"{m['id']}_{kind}.jpg"
         if not p.exists():
+            s = _t.monotonic()
             p.write_bytes(make())
+            print(f"  describe {m['id'][:8]}: {kind} built in {_t.monotonic() - s:.1f}s", flush=True)
         return p.read_bytes()
 
     if fp["kind"] == "interior":
@@ -197,7 +207,9 @@ def describe(m: dict, mem_dir: Path) -> dict:
     parts = [{"text": prompt}]
     for _, _, caption, data in images:
         parts += [{"text": caption}, gemini.image_part(data)]
-    text = gemini.generate(parts)
+    s = _t.monotonic()
+    text = gemini.generate(parts, timeout=25, retries=1)   # don't wait on an overloaded model: move to the next
+    print(f"  describe {m['id'][:8]}: gemini ({gemini.last_model}) {_t.monotonic() - s:.1f}s, total {_t.monotonic() - t0:.1f}s", flush=True)
     return dict(text=text, model=gemini.last_model or gemini.model_name(), lat=round(lat, 7), lon=round(lon, 7),
                 created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 images=[dict(kind=k, label=lbl) for k, lbl, _, _ in images], **extra)

@@ -62,11 +62,44 @@ onWalkerChange(() => {
 document.addEventListener("memory-saved", () => earcon("saved"));
 
 // ---------- speak, don't show ----------
-document.addEventListener("described", (e) => { earcon("ready"); setTimeout(() => speak(e.detail.description.text), 450); });
-document.addEventListener("describe-failed", (e) => { earcon("error"); speak(e.detail); _toast(e.detail, 6000); });
+// While Gemini thinks, say so once and keep a soft heartbeat going, so silence never means "broken".
+let thinking = null;
+function startThinking() {
+  stopThinking();
+  speak("Looking around. This takes a few seconds.");
+  thinking = setInterval(() => audio.tone(740, 0.05, 0.035), 1600);
+}
+function stopThinking() { clearInterval(thinking); thinking = null; }
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b && /Describe/.test(b.textContent)) startThinking();
+}, true);
+document.addEventListener("described", (e) => { stopThinking(); earcon("ready"); setTimeout(() => speak(e.detail.description.text), 450); });
+document.addEventListener("describe-failed", (e) => { stopThinking(); earcon("error"); speak(e.detail); _toast(e.detail, 6000); });
+
+// Listen must always answer: if a recording can't be played, say so instead of staying silent.
+window.addEventListener("unhandledrejection", (e) => {
+  earcon("error");
+  speak("Sorry, I couldn't play that memory.");
+  console.warn("playback failed:", e.reason);
+});
+$("listen").addEventListener("click", () => audio.tone(880, 0.04, 0.06), true);   // the press registered
 $("whereami").addEventListener("click", () => {
   if (!state.memories.some((m) => relative(m).dist <= NEAR_M)) earcon("nothing");
 }, true);
+
+// every card can be heard directly, from its direction
+memHooks.push(() => {
+  for (const m of state.memories) {
+    const actions = document.querySelector(`#mem-${m.id} .actions`);
+    if (!actions || actions.querySelector(".play")) continue;
+    const b = document.createElement("button");
+    b.className = "play";
+    b.textContent = "▶ Listen";
+    b.onclick = () => { audio.tone(880, 0.04, 0.06); playVoice(m); };
+    actions.prepend(b);
+  }
+});
 
 // text collapses to one line a judge can open
 memHooks.push(() => {
@@ -110,7 +143,10 @@ onWalkerChange(() => {
 });
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("select, input, textarea")) return;
-  if (e.code === "Space") { e.preventDefault(); if (!rec.mr) setBlind(!blind.on); return; }
+  if (e.code === "Space") {
+    if (!blind.on && e.target.closest("button")) return;   // Space on a focused button presses that button
+    e.preventDefault(); if (!rec.mr) setBlind(!blind.on); return;
+  }
   if (!blind.on) return;
   if (e.key === "Enter") {
     e.preventDefault();
