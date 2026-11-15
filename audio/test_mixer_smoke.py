@@ -68,7 +68,26 @@ def main():
     assert tail_rms < 0.001, "expected near-silence once warning list goes empty"
 
     sf.write("preview.wav", audio, sr)
+    hum_comes_back(bank)
     print("OK — wrote preview.wav, all smoke assertions passed")
+
+
+def hum_comes_back(bank):
+    """Regression: an obstacle vanishes long enough for its hum to fade out fully,
+    then returns at the same distance (same hum cutoff). That used to crash the
+    audio callback in Hum._post_lowpass (filter state dropped, never rebuilt)."""
+    mixer = Mixer(bank)
+    sr = mixer.sr
+    w = [{"id": "R", "az": 30, "dist": 1.0, "level": "warn"}]
+    out = []
+    for warnings, secs in ((w, 0.5), ([], 1.0), (w, 0.5), ([], 1.0), (w, 0.5)):
+        mixer.update_warnings(warnings)
+        out += [mixer.render_block(BLOCK) for _ in range(int(secs * sr / BLOCK))]
+    audio = np.concatenate(out)
+    assert not np.isnan(audio).any()
+    back = audio[int(3.1 * sr):]
+    assert np.sqrt(np.mean(back ** 2)) > 0.001, "expected sound after the obstacle returned"
+    print("hum on -> off -> on at the same distance: OK")
 
 
 if __name__ == "__main__":

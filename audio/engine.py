@@ -97,6 +97,7 @@ def main():
     receiver.start()
 
     STALE_AFTER_S = 0.5  # if C's feed goes silent/dies, fail safe to no audio
+    errors = [0]
 
     def callback(outdata, frames, time_info, status):
         if status:
@@ -104,8 +105,14 @@ def main():
         warnings, last_msg_time = receiver.latest()
         if warnings and (time.time() - last_msg_time) > STALE_AFTER_S:
             warnings = []  # fail safe: stop beeping about possibly-stale obstacle positions
-        mixer.update_warnings(warnings)
-        outdata[:] = mixer.render_block(frames)
+        try:
+            mixer.update_warnings(warnings)
+            outdata[:] = mixer.render_block(frames)
+        except Exception as e:  # never leave the buffer unfilled (= a click/noise burst)
+            outdata.fill(0)
+            errors[0] += 1
+            if errors[0] == 1 or errors[0] % 100 == 0:
+                print(f"engine: render error #{errors[0]} (block muted): {e!r}")
 
     print(f"engine: {mixer.sr} Hz, blocksize={BLOCKSIZE} ({BLOCKSIZE/mixer.sr*1000:.1f} ms/block)")
     with sd.OutputStream(

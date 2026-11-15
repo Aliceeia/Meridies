@@ -382,8 +382,10 @@ class Hum:
         if c != self.cut:
             self.sos = butter(4, c / (sr / 2), output="sos")
             self.cut = c
-            if self.zi is None:
-                self.zi = np.zeros((self.sos.shape[0], 2, 2))
+        # Separate from the cutoff check: block() drops zi when the hum fades out,
+        # and it may come back at the same cutoff (same distance).
+        if self.zi is None:
+            self.zi = np.zeros((self.sos.shape[0], 2, 2))
         y, self.zi = sosfilt(self.sos, y, axis=0, zi=self.zi)
         return y
 
