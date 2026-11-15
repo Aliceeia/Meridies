@@ -718,6 +718,14 @@ class Handler(BaseHTTPRequestHandler):
                 update(m["id"], lambda m: m.__setitem__("transcript", {"status": "pending"}))
             WORKER.submit(process, m["id"])
             return self.send(202, {"queued": m["id"]})
+        if parts == ["api", "client-log"]:
+            # a failure a page ran into: printed to this log only, never stored
+            try:
+                req = json.loads(self.body() or b"{}")
+                print(f"  CLIENT: {str(req.get('what'))[:60]} {json.dumps(req.get('detail'))[:300]} | {str(req.get('ua'))[:110]}", flush=True)
+            except ValueError:
+                pass
+            return self.send(204, b"")
         if parts == ["api", "hear"]:
             # a short spoken command (blindfold voice control) -> its words. The clip is not kept anywhere.
             n = int(self.headers.get("Content-Length") or 0)

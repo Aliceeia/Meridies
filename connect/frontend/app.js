@@ -501,6 +501,12 @@ function chime(m) {
   setTimeout(() => p.disconnect(), 1400);
 }
 
+// a failure the person ran into, sent to the server log so it can be fixed (browser + error only; no location)
+function report(what, detail) {
+  console.warn(what, detail);
+  try { navigator.sendBeacon("/api/client-log", JSON.stringify({ what, detail, ua: navigator.userAgent })); } catch (_) {}
+}
+
 async function playVoice(m) {
   if (state.hatWarning) return toast("Hat is warning — memory muted");
   stopVoice();
@@ -511,8 +517,11 @@ async function playVoice(m) {
   const bytes = await res.arrayBuffer();
   // Short browser recordings (webm without a stated length) can make decodeAudioData fail or never finish.
   // Then play the same file through a media element instead: same panner, so it still comes from its direction.
+  let decodeErr = null;
   const buf = await Promise.race([c.decodeAudioData(bytes.slice(0)),
-                                  new Promise((_, no) => setTimeout(() => no(new Error("decode stalled")), 2500))]).catch(() => null);
+                                  new Promise((_, no) => setTimeout(() => no(new Error("decode stalled")), 2500))])
+    .catch((e) => { decodeErr = `${e.name}: ${e.message}`; return null; });
+  if (decodeErr) report("memory decode", { memory: m.id, error: decodeErr, type: res.headers.get("Content-Type"), bytes: bytes.byteLength });
   if (state.hatWarning) return;
   const p = (play.panner = makePanner());
   placePanner(p, m);
@@ -532,8 +541,17 @@ async function playVoice(m) {
     c.createMediaElementSource(src).connect(g);
     src.stop = (when) => setTimeout(() => src.pause(), Math.max(0, (when - c.currentTime) * 1000));   // same API as a buffer source
     try { await src.play(); } catch (e) {
-      console.warn("memory playback failed:", e.name);
-      return toast("This recording can't be played");
+      // last resort: the plain file, no direction, rather than nothing
+      const plain = new Audio(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
+      try { await plain.play(); }
+      catch (e2) {
+        report("memory playback", { memory: m.id, decode: "failed", element: `${e.name}: ${e.message}`, plain: `${e2.name}: ${e2.message}`,
+                                    type: res.headers.get("Content-Type"), bytes: bytes.byteLength, ctx: c.state });
+        return toast("This recording can't be played");
+      }
+      report("memory playback (plain fallback used)", { memory: m.id, element: `${e.name}: ${e.message}` });
+      src = plain;
+      src.stop = () => plain.pause();
     }
   }
   play.src = src;
