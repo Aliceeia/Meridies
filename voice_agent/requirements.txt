@@ -1,0 +1,7 @@
+google-genai>=3.3
+sounddevice      # laptop: headset mic + speakers (Linux: sudo apt install libportaudio2)
+numpy
+pyzmq            # LiDAR warnings from sensing_pi (read-only SUB)
+pillow           # Pi camera server: JPEG encode/resize
+# Pi only, from apt (already installed on this Pi): python3-picamera2, ffmpeg, v4l-utils
+# laptop --camera webcam testing: ffmpeg on PATH
