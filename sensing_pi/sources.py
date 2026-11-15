@@ -28,7 +28,7 @@ def open_source(spec: str, rig=None, res: int = 8, hz: int = 10, realtime: bool 
 
 def _live(res, hz):
     from sensors.tof6 import Tof6
-    with Tof6(res=res, hz=hz, log=lambda m: print(m, flush=True)) as tof:
+    with Tof6(res=res, hz=hz, log=lambda m: print(m, flush=True), allow_missing=True) as tof:
         yield from tof.frames()
 
 

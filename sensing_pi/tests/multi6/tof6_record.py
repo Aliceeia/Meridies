@@ -29,13 +29,17 @@ def parse_args():
     p.add_argument("--csv", help="write every combined frame to this CSV")
     p.add_argument("--serve", type=int, metavar="PORT", help="stream frames as JSON lines over TCP on this port")
     p.add_argument("--no-int", action="store_true", help="ignore INT pins and poll every sensor over I2C")
+    p.add_argument("--allow-missing", action="store_true",
+                   help="keep going if a sensor isn't found; its zones are sent as invalid")
     return p.parse_args()
 
 
 def main():
     a = parse_args()
     log = lambda msg: print(msg, flush=True)  # noqa: E731
-    tof = Tof6(res=a.res, hz=a.hz, use_int=not a.no_int, log=log)
+    tof = Tof6(res=a.res, hz=a.hz, use_int=not a.no_int, log=log, allow_missing=a.allow_missing)
+    if tof.missing:
+        log(f"running WITHOUT {', '.join(f'S{k + 1}' for k in tof.missing)}")
 
     writer = csv_file = None
     if a.csv:
@@ -77,6 +81,9 @@ def main():
     el = time.monotonic() - t_start
     print(f"\n--- {n_frames} combined frames in {el:.1f} s")
     for k in range(C.N_SENSORS):
+        if k in tof.missing:
+            print(f"S{k + 1}: MISSING (not found at start)")
+            continue
         warn = "  <- no INT edges: check INT wire" if not a.no_int and tof.int_edges[k] == 0 else ""
         print(f"S{k + 1}: {tof.reads[k]} reads, {tof.errors[k]} errors, {tof.int_edges[k]} INT edges{warn}")
     if a.csv:
