@@ -110,7 +110,7 @@
       if (G.audio) { gx.stopMemory(); EAR.end(); return; }          // stopping answers with a tone, not words
       Speech.cancel(); EAR.play();
       const ok = await gx.playMemory(m, { onend: () => { EAR.end(); } });
-      if (!ok) Speech.oops();
+      if (!ok) { const why = await gx.whyNoPlay(m); if (Speech.tone) Speech.tone(); else EAR.error(); say(why, { kind: "short", force: true }); }
     },
     async describe() {
       const m = mem();

@@ -506,7 +506,8 @@ async function playVoice(m) {
   stopVoice();
   const c = audio.ctx();
   const res = await fetch(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
-  if (!res.ok) return toast("Couldn't get that — try again");
+  // a memory is the person's own recording: if there is none, say so; never read the transcript in a synthetic voice
+  if (!res.ok) return toast(res.status === 404 ? "There's no recording for this one" : "Couldn't get that — try again");
   const buf = await c.decodeAudioData(await res.arrayBuffer());
   if (state.hatWarning) return;
   const p = (play.panner = makePanner());

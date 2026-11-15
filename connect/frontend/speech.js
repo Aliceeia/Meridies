@@ -59,8 +59,22 @@
     return forms[i];
   }
 
+  // Delivery per sentence: a hazard or warning sounds different from a description.
+  //   alert: warnings, and hazard lines (the only sentences that carry a height in metres)
+  //   plain: short status lines and help;  calm: everything else
+  function styleOf(sentence, kind) {
+    if (kind === "warning" || /^(mind the|careful|stop|low )/i.test(sentence) || /\bmetres?\b/i.test(sentence)) return "alert";
+    return kind === "short" || kind === "help" ? "plain" : "calm";
+  }
+
+  // Delivery that doesn't depend on the TTS model: warnings brisker, descriptions unhurried. Audio playbackRate keeps
+  // the pitch (preservesPitch), so this changes pace, not voice.
+  const PACE = { alert: 1.1, plain: 1.0, calm: 0.95 };
+  const TTS_RATE = { alert: 1.08, plain: 0.98, calm: 0.9 };
+
   const S = {
-    LIMITS, clean, shape, vary, seconds,
+    LIMITS, clean, shape, vary, seconds, styleOf, PACE,
+    useVoice: false,                                   // pages turn on the cached human voice (/api/voice)
     muted: () => false,                                // a page can mute speech (e.g. while the hat warns)
     tone: null,                                        // a page can give oops() its error tone
     lastText: "", lastDone: 0, current: null,
@@ -69,24 +83,61 @@
       const t = shape(text, kind);
       if (!t) return "";
       if (!force && t === S.lastText && S.lastDone && Date.now() - S.lastDone < 20000) return "";   // already heard it
-      if (typeof speechSynthesis === "undefined") return t;
-      speechSynthesis.cancel();
+      S.cancel();
+      const tok = { cut: false, audio: null, done: false };
+      S.lastText = t; S.lastDone = 0; S.current = tok;
+      tok.finish = () => {
+        if (tok.done) return; tok.done = true;
+        if (!tok.cut) S.lastDone = Date.now();
+        if (S.current === tok) S.current = null;
+        onend && onend(tok.cut);
+      };
+      if (onend) setTimeout(tok.finish, 2500 + seconds(t) * 1000 * 1.5);   // some engines never fire "end"
+      if (S.useVoice && typeof fetch !== "undefined") S._clips(t, kind, tok); else S._tts(t, tok, kind);
+      return t;
+    },
+    // the human voice: one cached clip per sentence, played in order. If any is missing, the whole line uses the
+    // browser voice (never two voices in one line); the server makes the missing clips for next time.
+    _clips(t, kind, tok) {
+      const sents = t.split(/(?<=[.!?…])\s+/).filter(Boolean);
+      const styles = sents.map((s) => styleOf(s, kind));
+      Promise.all(sents.map((s, i) => fetch(`/api/voice?text=${encodeURIComponent(s)}&style=${styles[i]}`)
+        .then((r) => (r.ok ? r.blob() : null)).catch(() => null)))
+        .then((blobs) => {
+          if (tok.cut) return;
+          if (blobs.some((b) => !b)) return S._tts(t, tok, kind);
+          let i = 0;
+          const next = () => {
+            if (tok.cut) return;
+            if (i >= blobs.length) return tok.finish();
+            const a = (tok.audio = new Audio(URL.createObjectURL(blobs[i])));
+            a.preservesPitch = true;
+            a.playbackRate = PACE[styles[i]] || 1;
+            i++;
+            a.onended = () => setTimeout(next, styles[i - 1] === "alert" ? 80 : 160);   // a breath between sentences
+            a.onerror = () => S._tts(sents.slice(i - 1).join(" "), tok, kind);
+            a.play().catch(() => S._tts(sents.slice(i - 1).join(" "), tok, kind));   // no gesture yet: browser voice
+          };
+          next();
+        });
+    },
+    _tts(t, tok, kind = "any") {                       // fallback: the browser's own voice
+      if (tok.cut) return;
+      if (typeof speechSynthesis === "undefined") return tok.finish();
       const u = new SpeechSynthesisUtterance(t);
       u.lang = "en-US";
       const v = S.voice || S.pickVoice();
       if (v) u.voice = v;
-      u.rate = 0.95; u.pitch = 1.03; u.volume = 0.95;
-      S.lastText = t; S.lastDone = 0; S.current = u;
-      let done = false;
-      const finish = () => { if (done) return; done = true; if (!u._cut) S.lastDone = Date.now(); if (S.current === u) S.current = null; onend && onend(u._cut); };
-      u.onend = finish; u.onerror = () => { u._cut = true; finish(); };
-      if (onend) setTimeout(finish, 1500 + seconds(t) * 1000 * 1.3);   // some engines never fire "end"
+      const first = styleOf(t.split(/(?<=[.!?…])\s+/)[0] || t, kind);
+      u.rate = TTS_RATE[first] || 0.95; u.pitch = first === "alert" ? 1.0 : 1.04; u.volume = first === "alert" ? 1 : 0.92;
+      u.onend = tok.finish; u.onerror = () => { tok.cut = true; tok.finish(); };
       speechSynthesis.speak(u);
-      return t;
     },
     cancel() {                                         // cut off mid-sentence; it does not count as heard
-      if (S.current) S.current._cut = true;
+      const tok = S.current;
+      if (tok) { tok.cut = true; if (tok.audio) tok.audio.pause(); }
       if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      S.current = null;
       S.lastDone = 0;
     },
     oops() {

@@ -42,6 +42,20 @@ test("silence: the same words already heard in full are not repeated; cut-off wo
   assert.ok(S.say("Dining room.", { kind: "arrival" }));   // so asking again answers
 });
 
+test("a warning and a description are delivered differently", () => {
+  assert.strictEqual(S.styleOf("Stop, ahead.", "warning"), "alert");
+  assert.strictEqual(S.styleOf("Mind the chandelier: one metre six, two steps ahead.", "arrival"), "alert");
+  assert.strictEqual(S.styleOf("Chandelier, one metre six, two steps ahead.", "arrival"), "alert");
+  assert.strictEqual(S.styleOf("A dining table, about two steps ahead.", "detail"), "calm");
+  assert.ok(S.PACE.alert > S.PACE.calm);
+  log.spoken.length = 0;
+  S.say("Stop, ahead.", { kind: "warning", force: true });
+  const warn = speechSynthesis.last;
+  S.say("A dining table, about two steps ahead.", { kind: "detail", force: true });
+  const desc = speechSynthesis.last;
+  assert.ok(warn.rate > desc.rate, `${warn.rate} vs ${desc.rate}`);
+});
+
 test("errors never speak jargon", () => {
   const t = S.oops();
   assert.strictEqual(t, "I couldn't get that — try again.");

@@ -46,6 +46,8 @@ LINKS = DATA / "family_links.json"          # token -> author_id; git-ignored
 MAX_FRAME = 3 * 2**20
 AUTO_PROCESS = os.environ.get("MERIDIES_AUTO_PROCESS", "1") == "1"    # transcribe + cover (+ describe) after save
 AUTO_DESCRIBE = os.environ.get("MERIDIES_AUTO_DESCRIBE", "1") == "1"
+VOICE_ON = os.environ.get("MERIDIES_VOICE", "1") == "1"          # cached Gemini clips for system speech
+VOICE_AUTOGEN = os.environ.get("MERIDIES_VOICE_AUTOGEN", "1") == "1"   # make missing clips in the background
 
 
 # ---------- AI description: see connect/backend/describe.py ----------
@@ -562,11 +564,33 @@ class Handler(BaseHTTPRequestHandler):
             viewer = q.get("viewer", "")
             return self.send(200, {"members": circles().get(viewer, []) if viewer else [],
                                    "in_circles_of": sorted(a for a, ms in circles().items() if viewer and viewer in ms)})
+        if parts == ["api", "voice"]:
+            # SYSTEM speech only (never a memory): a cached clip, or 404 at once so the page uses the browser voice
+            # while the clip is made in the background. Never waits on the AI.
+            from connect.backend import voice
+            text, style = (q.get("text") or "").strip(), q.get("style", "calm")
+            if not VOICE_ON or not text or len(text) > 600 or style not in voice.STYLE:
+                return self.err(404, "no clip")
+            v = settings().get("voice", voice.DEFAULT_VOICE)
+            p = voice.cached(text, style, v)
+            if p:
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/wav")
+                body = p.read_bytes()
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "max-age=86400")
+                self.end_headers()
+                return self.wfile.write(body)
+            queued = voice.queue(text, style, v) if VOICE_AUTOGEN else False
+            return self.send(404, {"error": "no clip yet", "queued": queued})
         if parts == ["api", "settings"]:
+            from connect.backend import voice
             s = settings()
             every = [json.loads(f.read_text()) for f in MEM.glob("*.json") if ID_RE.match(f.stem)] if MEM.exists() else []
             n = sum(1 for m in every if m.get("is_sample"))
-            return self.send(200, {"hide_samples": bool(s.get("hide_samples")), "samples": n, "real": len(every) - n})
+            return self.send(200, {"hide_samples": bool(s.get("hide_samples")), "samples": n, "real": len(every) - n,
+                                   "voice": s.get("voice", voice.DEFAULT_VOICE), "voices": voice.VOICES,
+                                   "voice_pending": voice.pending()})
         if parts == ["api", "hat", "events"]:
             return self.hat_events()
         if parts == ["api", "live", "stream"]:
@@ -708,10 +732,16 @@ class Handler(BaseHTTPRequestHandler):
             req = json.loads(self.body() or b"{}")
             if not req.get("viewer"):
                 return self.err(403, "only an author can change this")
+            from connect.backend import voice
             s = settings()
-            s["hide_samples"] = bool(req.get("hide_samples"))
+            if "hide_samples" in req:
+                s["hide_samples"] = bool(req.get("hide_samples"))
+            if "voice" in req:
+                if req["voice"] not in voice.VOICES:
+                    return self.err(400, f"voice must be one of {voice.VOICES}")
+                s["voice"] = req["voice"]
             SETTINGS.write_text(json.dumps(s))
-            return self.send(200, {"hide_samples": s["hide_samples"]})
+            return self.send(200, {"hide_samples": bool(s.get("hide_samples")), "voice": s.get("voice", voice.DEFAULT_VOICE)})
         if parts == ["api", "hat", "button"]:
             req = json.loads(self.body() or b"{}")
             if req.get("button") not in HAT_BUTTONS:

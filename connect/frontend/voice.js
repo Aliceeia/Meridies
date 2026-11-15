@@ -19,6 +19,7 @@ speechSynthesis.onvoiceschanged = pickVoice;
 pickVoice();
 // Every utterance goes through Speech (speech.js): interruptible, length-capped, no filler, no repeats.
 Speech.muted = () => state.hatWarning;                 // an obstacle warning outranks every spoken word
+Speech.useVoice = true;                                // system lines in the cached human voice (memories never)
 speak = function (text, { kind = "any", force = false } = {}) {   // eslint-disable-line no-func-assign
   if (state.hatWarning) return earcon("muted");
   return Speech.say(text, { kind, force });

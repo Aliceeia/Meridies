@@ -243,7 +243,12 @@ async function togglePlay(m) {
   if (G.playingId === m.id) { stopMemory(); announce("Paused."); return; }
   const p = placeOf(m);
   const ok = await playMemory(m, { onend: () => announce("Finished.") });
-  announce(ok ? `${p.name}, playing.` : "I couldn't get that — try again.");
+  announce(ok ? `${p.name}, playing.` : await whyNoPlay(m));
+}
+// A memory is the person's own recording. If the file is missing, say so: never read the transcript in its place.
+async function whyNoPlay(m) {
+  try { if ((await fetch(withAuth(m.audio))).status === 404) return "There's no recording for this one."; } catch (_) {}
+  return "I couldn't get that — try again.";
 }
 
 // "Tell me more": the one live AI call, at the spot where this memory was left. Explicit requests only.
@@ -447,6 +452,16 @@ async function samplesSwitch(set) {
     announce(set ? "Sample memories hidden." : "Sample memories shown.");
   }
   $("devBox").hidden = !s.samples;
+  // A/B the system voice (descriptions, where am I, status). Memories are always the person's own recording.
+  const NOTE = { Sulafat: "warm", Aoede: "light", Zephyr: "bright", Puck: "lively" };
+  $("voices").replaceChildren(...(s.voices || []).map((v) => el("button", {
+    class: "item", "aria-pressed": String(v === s.voice),
+    onclick: async () => {
+      await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+                                     body: JSON.stringify({ viewer: G.user, voice: v }) });
+      await samplesSwitch();
+      Speech.say(Speech.vary("voice.try", ["This is how I sound now.", "Here's the new voice."]), { kind: "short", force: true });
+    } }, v, el("small", {}, NOTE[v] || ""))));
   $("samplesBtn").replaceChildren(s.hide_samples ? "Show sample memories" : "Hide sample memories",
     el("small", {}, s.hide_samples ? `${s.samples} hidden` : `${s.samples} shown`));
   $("samplesBtn").onclick = () => samplesSwitch(!s.hide_samples);
@@ -461,5 +476,6 @@ if (FAMILY) {
   renderAccounts(); refreshCircle(); samplesSwitch();
 }
 window.gallery = { G, load, render, playMemory, stopMemory, takeMeThere, visOf, transcriptLine, dateHuman, plural, auth, withAuth,
-                   openDetail, memById, tellMeMore, nameOf };
+                   openDetail, memById, tellMeMore, nameOf, whyNoPlay };
+Speech.useVoice = true;                     // system lines in the cached human voice (memories are never synthesised)
 load();

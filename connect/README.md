@@ -45,6 +45,23 @@ Every page speaks through `frontend/speech.js`; the server's templates live in `
 
 `pytest -s connect/tests/test_speech.py` prints ten consecutive arrivals through the La Mirada scan to read aloud.
 
+### The system voice (system speech only; memories are never synthesised)
+
+- `backend/voice.py`: Gemini TTS (`gemini-3.8-flash-tts`, then the other TTS models), voice **Sulafat** by default,
+  A/B in the gallery's profile menu (Sulafat, Aoede, Zephyr, Puck). Gemini returns raw PCM at 24 kHz mono 16-bit;
+  every clip is written as WAV with that rate in its header, so nothing guesses it.
+- Delivery: a director's-notes prompt (TTS models accept no system instruction) asking for a friend who knows the
+  place; "alert" for hazards/warnings, "calm" for descriptions, "plain" for status. Clips far longer than their words
+  (the model read the notes aloud) are rejected and retried, then made from the bare line. Playback adds pace on top:
+  alert ×1.1, calm ×0.95, pitch preserved.
+- Cache: one WAV per sentence, keyed by voice + style + text, in `data/cache/voice/`. `/api/voice` serves only the
+  cache; a miss answers 404 at once (the page speaks that line in the browser voice, never mixing two voices in a line)
+  and the clip is made in the background for next time.
+- **Quota:** the free tier allows 10 TTS requests per day per model. `python connect/tools/voice_warm.py --priority`
+  makes the most-heard lines; `voice_warm.py` (resumable) makes the full demo set (~330 clips) over several days, or
+  at once with billing enabled. `--voice Aoede` warms another voice for A/B.
+- A memory with no audio file says "There's no recording for this one" — its transcript is never read in its place.
+
 ### Gallery rules (enforced by the server, tested in `tests/test_gallery_server.py`)
 
 - `visibility`: `private` (default) | `family` | `community`. Only the author changes it. `community` is only ever a

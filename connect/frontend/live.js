@@ -35,6 +35,7 @@ function tone(f, dur, g = 0.15, when = 0) {
 }
 // Every word goes through Speech (speech.js): interruptible, capped, no filler, no repeats. A warning mutes the rest.
 Speech.muted = () => L.warning;
+Speech.useVoice = true;           // cached human voice when the gallery is reachable; the browser voice offline
 Speech.tone = () => tone(233, 0.2);
 const say = (text, opts = {}) => Speech.say(text, { kind: "short", ...opts });
 // a live hat warning: one clause, under two seconds, said once per new obstacle

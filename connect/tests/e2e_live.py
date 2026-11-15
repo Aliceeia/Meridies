@@ -33,6 +33,7 @@ OUT.mkdir(exist_ok=True)
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="meridies-live-"))
     srv.MEM, srv.LINKS, srv.AUTO_PROCESS = tmp, tmp / "links.json", False
+    srv.VOICE_ON, srv.VOICE_AUTOGEN = False, False          # spoken lines captured from the browser voice
     ai_calls = []
     gemini.generate = lambda parts, **k: ai_calls.append(parts) or "There's a doorway and a chair close by."
     pub = zmq.Context.instance().socket(zmq.PUB)

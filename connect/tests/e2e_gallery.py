@@ -47,6 +47,9 @@ def no_sideways_scroll(page, what):
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="meridies-e2e-"))
     srv.MEM, srv.LINKS, srv.CIRCLES, srv.SETTINGS, srv.AUTO_PROCESS = tmp, tmp / "l.json", tmp / "c.json", tmp / "s.json", False
+    srv.VOICE_ON, srv.VOICE_AUTOGEN = False, False          # browser voice here (captured); the clip path is tested below
+    from connect.backend import voice
+    voice.CACHE = tmp / "voice"
     srv.desc.describe = lambda m, d: dict(text="A test description of the spot.", model="test", images=[])   # no Gemini quota
     from connect.backend import gemini
     global AI_CALLS
@@ -213,7 +216,9 @@ def main():
 
 
 def listen(page, base):
-    page.add_init_script("""window.__said = []; window.__cancels = 0;
+    page.add_init_script("""window.__said = []; window.__cancels = 0; window.__clips = [];
+      const play = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () { window.__clips.push(this); return play.call(this); };
       speechSynthesis.speak = (u) => { window.__said.push(u.text); };
       const c = speechSynthesis.cancel.bind(speechSynthesis);
       speechSynthesis.cancel = () => { window.__cancels++; c(); };""")
@@ -262,6 +267,23 @@ def listen(page, base):
     assert "of 3" in said() or "last" in said().lower()
     page.keyboard.press("x"); page.wait_for_timeout(150)
     assert said() == "H for help."
+    # the human voice: with a cached clip, the clip plays (not the browser voice), and any key cuts it off
+    from connect.backend import voice
+    srv.VOICE_ON = True
+    p = voice.path_for("H for help.", "plain", "Sulafat")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(voice.wav(b"\x00\x00" * 24000 * 3))       # three seconds (silent stand-in)
+    n_said = page.evaluate("window.__said.length")
+    page.evaluate("Speech.lastText = ''")                    # not a repeat
+    page.keyboard.press("x")
+    page.wait_for_function("window.__clips.length > 0", timeout=5000)
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.__said.length") == n_said, "a cached clip must replace the browser voice"
+    assert page.evaluate("!window.__clips[window.__clips.length - 1].paused")
+    page.keyboard.press("Shift"); page.wait_for_timeout(100)
+    assert page.evaluate("window.__clips[window.__clips.length - 1].paused"), "a key must cut the clip off"
+    print("  cached clip played, cut off by a key")
+    srv.VOICE_ON = False
     for s in page.evaluate("window.__said"):
         for bad in ["sorry", "loading", "looking closer", "this takes", "i can see", "it appears"]:
             assert bad not in s.lower(), (bad, s)
