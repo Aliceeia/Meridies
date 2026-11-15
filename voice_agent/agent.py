@@ -4,6 +4,7 @@
     python agent.py --camera webcam               # laptop webcam instead of the cap camera (testing)
     python agent.py --text                        # type instead of talk (no mic), still speaks back
     python agent.py --text --mute                 # type and read, no audio at all
+    python agent.py --web 8092                    # agent on the Pi, talk via the laptop browser (localhost:8092)
     python agent.py --list-devices                # pick --mic / --speaker for the headset
 
 Say things like:
@@ -138,7 +139,8 @@ class Agent:
         self.cam = sensors.Camera(a.camera)
         self.obs = sensors.Obstacles(None if a.no_lidar else a.lidar)
         self.mem = memory.Memories(a.memory_url, a.viewer)
-        self.spk = Speaker(a.speaker, enabled=not a.mute)
+        self.spk = Speaker(a.speaker, enabled=not (a.mute or a.web))
+        self.web = None
         self.session = None
         self.guide_task: asyncio.Task | None = None
         self.resume_handle = None
@@ -265,14 +267,22 @@ class Agent:
         client = genai.Client(api_key=config.api_key(), http_options=types.HttpOptions(api_version="v1beta"))
         loop = asyncio.get_running_loop()
         mic_q: asyncio.Queue = asyncio.Queue()
-        mic = None if self.a.text else mic_stream(loop, mic_q, self.a.mic)
+        text_q: asyncio.Queue = asyncio.Queue()
+        if self.a.web:                      # browser on the laptop is the mic + speaker
+            import web_bridge
+            self.web = self.spk = web_bridge.WebBridge(self.a.web, mic_q, text_q)
+            await self.web.start()
+        mic = None if (self.a.text or self.a.web) else mic_stream(loop, mic_q, self.a.mic)
         while True:   # reconnect (with resumption) when the server rotates the session
             try:
                 async with client.aio.live.connect(model=self.a.model, config=self.live_config()) as s:
                     self.session = s
                     print(f"[live] connected to {self.a.model}. " + ("Type and press Enter." if self.a.text
-                                                                    else "Talk into the headset. Ctrl+C to quit."))
-                    sender = self._send_text(s) if self.a.text else self._send_mic(s, mic_q)
+                          else "Talk in the browser." if self.a.web else "Talk into the headset. Ctrl+C to quit."))
+                    if self.web:
+                        self.web.send("status", "connected: listening")
+                    sender = (self._send_text(s) if self.a.text else self._send_web(s, mic_q, text_q) if self.a.web
+                              else self._send_mic(s, mic_q))
                     done, pending = await asyncio.wait([asyncio.create_task(sender),
                                                         asyncio.create_task(self._receive(s))],
                                                        return_when=asyncio.FIRST_COMPLETED)
@@ -297,6 +307,21 @@ class Agent:
         while True:
             pcm = await q.get()
             await s.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={IN_RATE}"))
+
+    async def _send_web(self, s, mic_q, text_q):
+        async def typed():
+            while True:
+                await s.send_realtime_input(text=await text_q.get())
+        t = asyncio.create_task(typed())
+        try:
+            await self._send_mic(s, mic_q)
+        finally:
+            t.cancel()
+
+    def ui(self, kind: str, text: str):
+        print(f"{kind:4}: {text}" if kind in ('you', 'bot') else text, flush=True)
+        if self.web:
+            self.web.send(kind, text)
 
     async def _send_text(self, s):
         while True:
@@ -332,9 +357,9 @@ class Agent:
                             self.spk.play(p.inline_data.data)
                 if sc.turn_complete:
                     if heard:
-                        print(f"you : {''.join(heard).strip()}")
+                        self.ui("you", ''.join(heard).strip())
                     if said:
-                        print(f"bot : {''.join(said).strip()}")
+                        self.ui("bot", ''.join(said).strip())
                     heard, said = [], []
 
     async def _run_tools(self, s, call):
@@ -348,7 +373,7 @@ class Agent:
                 except Exception as e:
                     traceback.print_exc()
                     result = {"error": f"{type(e).__name__}: {str(e)[:200]}. Tell the person briefly."}
-                print(f"[tool] {fc.name}({dict(fc.args or {})}) {time.time() - t0:.1f}s -> {str(result)[:160]}")
+                self.ui("tool", f"[tool] {fc.name}({dict(fc.args or {})}) {time.time() - t0:.1f}s -> {str(result)[:160]}")
                 responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result))
         finally:
             tick.cancel()
@@ -367,6 +392,7 @@ def main():
     ap.add_argument("--mic", help="input device index/name (see --list-devices)")
     ap.add_argument("--speaker", help="output device index/name")
     ap.add_argument("--text", action="store_true", help="type instead of using the mic")
+    ap.add_argument("--web", type=int, metavar="PORT", help="use the laptop browser as mic+speaker (http://localhost:PORT)")
     ap.add_argument("--mute", action="store_true", help="no audio output (print transcripts only)")
     ap.add_argument("--guide-interval", type=float, default=2.0, help="seconds between guidance steps")
     ap.add_argument("--save-snapshots", action="store_true", help="keep every photo in snapshots/")
