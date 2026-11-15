@@ -19,13 +19,13 @@ This folder lives outside the repo on purpose: it changes nothing in `HackPrince
 
 ## Run
 
-**From git:** the key is not committed. Create `voice_agent/.env` containing `GEMINI_API_KEY=...` (ask the team), or copy the ready-made folder from the Pi at `~/meridies/gemini_voice_agent/`.
-
 **On the Pi** (camera on the front of the cap, either a CSI Camera Module or a USB webcam):
 ```bash
-cd ~/meridies/gemini_voice_agent && .venv/bin/python camera_server.py           # add --rotate 180 if mounted upside down
-curl -o /tmp/t.jpg http://localhost:8090/snapshot.jpg                         # sanity check
+~/meridies/gemini_voice_agent/run_camera.sh       # background server, log in camera.log (add --rotate 180 if upside down)
+curl http://localhost:8090/health                 # {"ok": true, "source": "picam", ...}
 ```
+Live view: open **http://172.20.10.5:8090/** in any browser on the hotspot. The server keeps looking for a camera: a USB webcam is picked up while it runs, but a ribbon (CSI) camera is only detected after a reboot.
+
 
 **On the laptop:**
 ```bash

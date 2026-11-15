@@ -9,6 +9,7 @@ import json
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -24,8 +25,15 @@ class Camera:
     def snapshot(self) -> bytes:
         s = self.source
         if s.startswith("http"):
-            with urllib.request.urlopen(s, timeout=5) as r:
-                return r.read()
+            try:
+                with urllib.request.urlopen(s, timeout=5) as r:
+                    return r.read()
+            except urllib.error.HTTPError as e:
+                if e.code == 503:
+                    raise RuntimeError("the cap camera is connected to the Pi but not sending pictures yet") from None
+                raise
+            except urllib.error.URLError:
+                raise RuntimeError("the cap camera server can't be reached (is camera_server.py running on the Pi?)") from None
         if s.startswith("webcam"):
             return _webcam_frame(s.partition(":")[2] or "0")
         return Path(s).read_bytes()

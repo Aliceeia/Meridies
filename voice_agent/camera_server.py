@@ -5,11 +5,13 @@
 
 Endpoints:
     GET /snapshot.jpg   newest frame (JPEG, ~640-1024 px wide)
-    GET /health         {"ok": true, "source": ..., "age_s": ...}
+    GET /stream         live MJPEG (open / in a browser for a viewer page)
+    GET /health         {"ok": true, "source": ..., "age_s": ..., "error": ...}
 
 Backends, tried in order unless --source is given:
     picam            Raspberry Pi Camera Module via picamera2 (CSI ribbon)
     usb:/dev/videoN  any UVC webcam via ffmpeg (v4l2)
+    file:/path.jpg   a still image, looped (testing without a camera)
 
 Deliberately NOT on ports 5555-5558 (owned by sensing_pi).
 """
@@ -32,7 +34,9 @@ class Camera:
         self.lock = threading.Lock()
         self.jpeg: bytes | None = None
         self.t = 0.0
-        self.source = source or self._autodetect()
+        self.wanted = source            # None = autodetect, retried until a camera appears
+        self.source = source or "searching"
+        self.error = None
         threading.Thread(target=self._loop, daemon=True).start()
 
     @staticmethod
@@ -49,7 +53,7 @@ class Camera:
             r = subprocess.run(["v4l2-ctl", "-d", dev, "--list-formats"], capture_output=True, text=True)
             if "MJPG" in r.stdout or "YUYV" in r.stdout:
                 return f"usb:{dev}"
-        raise SystemExit("No camera found: attach a Pi Camera Module (CSI) or a USB webcam, or pass --source")
+        raise LookupError("no camera found (CSI cameras need a reboot after plugging in; USB is picked up live)")
 
     def _encode(self, img) -> bytes:
         from PIL import Image
@@ -69,17 +73,32 @@ class Camera:
             self.jpeg, self.t = jpeg, time.time()
 
     def _loop(self):
+        last_err = None
         while True:
             try:
+                self.source = self.wanted or self._autodetect()
+                self.error = None
                 if self.source == "picam":
                     self._picam()
                 elif self.source.startswith("usb:"):
                     self._usb(self.source[4:])
+                elif self.source.startswith("file:"):    # testing without a camera: loop one image
+                    self._file(self.source[5:])
                 else:
                     raise SystemExit(f"unknown source {self.source}")
-            except Exception as e:  # camera unplugged etc: keep retrying, /health reports staleness
-                print("camera error:", e, flush=True)
+            except Exception as e:  # no camera yet / unplugged: keep retrying, /health reports it
+                self.error = str(e)
+                if self.error != last_err:
+                    print("camera:", e, flush=True)
+                    last_err = self.error
                 time.sleep(2)
+
+    def _file(self, path: str):
+        from PIL import Image
+        jpeg = self._encode(Image.open(path))
+        while True:
+            self._publish(jpeg)
+            time.sleep(0.5)
 
     def _picam(self):
         from picamera2 import Picamera2
@@ -114,6 +133,15 @@ class Camera:
         raise RuntimeError("ffmpeg exited")
 
 
+VIEWER = b"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Cap camera</title><style>body{margin:0;background:#111;color:#ddd;font:14px system-ui;display:flex;
+flex-direction:column;align-items:center;gap:8px;padding:12px}img{max-width:100%;border-radius:6px;background:#222}</style>
+</head><body><img src="/stream" alt="live camera feed"><div id="s">...</div><script>
+setInterval(async()=>{try{const h=await (await fetch('/health')).json();
+document.getElementById('s').textContent=h.ok?`live: ${h.source}`:`no frames: ${h.error||h.source}`}catch(e){}},1000)
+</script></body></html>"""
+
+
 def make_handler(cam: Camera):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -137,15 +165,34 @@ def make_handler(cam: Camera):
                 return self._send(200, jpeg, "image/jpeg")
             if path == "/health":
                 body = {"ok": jpeg is not None and time.time() - t < 3, "source": cam.source,
-                        "age_s": round(time.time() - t, 2) if jpeg else None}
+                        "age_s": round(time.time() - t, 2) if jpeg else None, "error": cam.error}
                 return self._send(200, json.dumps(body).encode(), "application/json")
+            if path == "/stream":                       # MJPEG: works in any browser <img>
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                last = 0.0
+                try:
+                    while True:
+                        with cam.lock:
+                            jpeg, t = cam.jpeg, cam.t
+                        if jpeg and t != last:
+                            last = t
+                            self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                             + str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n")
+                        time.sleep(0.05)
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+            if path == "/":
+                return self._send(200, VIEWER, "text/html; charset=utf-8")
             self._send(404, b'{"error":"not found"}', "application/json")
     return H
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--source", help="picam | usb:/dev/videoN (default: autodetect)")
+    ap.add_argument("--source", help="picam | usb:/dev/videoN | file:img.jpg (default: autodetect, retried)")
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--width", type=int, default=1024, help="max JPEG width sent to Gemini")
     ap.add_argument("--rotate", type=int, default=0, choices=(0, 90, 180, 270), help="if the camera is mounted rotated")
