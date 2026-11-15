@@ -1,6 +1,6 @@
 """Ray-cast simple scenes through any rig into tof6 frames ({"t","res","d","s"}).
 
-Used by the tests, and by run_objects.py --source sim:<scene> as a hardware-free mock.
+Used by the tests, and by `main.py --sim <scene>` / `objects.run --source sim:<scene>` as a hardware-free mock.
 Shapes are in the head frame (x forward, y right, z up, metres).
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ def render(rig: Rig, shapes, res: int = 8, t: float = 0.0, max_range_m: float = 
            noise_mm: float = 0.0, rng=None) -> dict:
     """One tof6 frame of `shapes` as seen by every sensor in `rig`."""
     rng = rng or np.random.default_rng(0)
-    d_all, s_all = [], []
+    d_all, s_all, sig_all, sps_all = [], [], [], []
     for m in rig.sensors:
         rays = zone_rays(m, res, rig.fov_deg, rig.zone_flip)
         norm = np.linalg.norm(rays, axis=1)
@@ -74,7 +74,10 @@ def render(rig: Rig, shapes, res: int = 8, t: float = 0.0, max_range_m: float = 
         raw = (mm - m.range_offset_mm) / m.range_scale
         d_all.append([int(round(v)) if ok else 0 for v, ok in zip(raw, seen)])
         s_all.append([5 if ok else NO_TARGET for ok in seen])
-    return {"t": round(t, 4), "res": res, "d": d_all, "s": s_all}
+        # roughly what the real sensors report (2026-11-15 sample): sigma ~1% of range, signal ~ 1/d^2
+        sig_all.append([int(2 + 0.01 * v) if ok else 0 for v, ok in zip(mm, seen)])
+        sps_all.append([int(5e7 / max(v, 50) ** 2) if ok else 0 for v, ok in zip(mm, seen)])
+    return {"t": round(t, 4), "res": res, "d": d_all, "s": s_all, "sigma": sig_all, "signal": sps_all}
 
 
 # ---------------------------------------------------------------- named moving scenes

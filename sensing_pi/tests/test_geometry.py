@@ -1,19 +1,16 @@
 """Synthetic checks for sensing_pi/geometry. Run from sensing_pi/:
-    .venv/bin/python tests/geometry/test_geometry.py
+    .venv/bin/python tests/test_geometry.py       (or all tests: .venv/bin/python tests/run_all.py)
 (also works under pytest)."""
 import math
-import sys
 from dataclasses import replace
-from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
-from geometry import (HeadOrientation, MPU6050Source, Rig, apply, basis, calibrate_mount,  # noqa: E402
+from fixtures import ROOT, cap_rig
+from geometry import (HeadOrientation, MPU6050Source, Rig, apply, basis, calibrate_mount,
                       direction, fit_range, frame_to_points, head_to_world, load_mounts, to_angles,
                       zone_angles)
-from geometry.transform import zone_rays  # noqa: E402
+from geometry.transform import zone_rays
 
 RES = 8
 
@@ -42,7 +39,7 @@ def simulate_wall(m, rig, normal, D, n_frames=5, noise_mm=0.0, seed=0):
 
 
 def rig():
-    return load_mounts(ROOT / "config" / "cap_mounts.json")
+    return cap_rig()   # planned cap layout, fixed (tests/fixtures.py)
 
 
 def test_direction_roundtrip():
@@ -113,6 +110,45 @@ def test_calibrate_mount_recovers_angles():
         assert abs(fitted.el_deg - true_m.el_deg) < 0.7, rep
         assert rep["rms_m"] < 0.02 and rep["rms_m"] < rep["start_rms_m"], rep
         print("  ", rep)
+
+
+def test_layout_conventions():
+    from geometry.layout import angle_to_az, az_to_angle, fields_to_row, row_to_fields
+    # angle: counter-clockwise from above, 90 = left -> internal az + right
+    assert angle_to_az(0) == 0 and angle_to_az(90) == -90 and angle_to_az(270) == 90
+    assert angle_to_az(180) in (-180, 180) and angle_to_az(320) == 40 and angle_to_az(360) == 0
+    for az in (-170, -85, -40, 0, 40, 85, 170):
+        assert abs(angle_to_az(az_to_angle(az)) - az) < 1e-9
+    # x_cm right / y_cm front / height_cm up -> x_m forward / y_m right / z_m up
+    f = row_to_fields((-8.0, 15.0, 40.0, -10.0, 7.0))
+    assert f == {"x_m": 0.15, "y_m": -0.08, "z_m": 0.07, "az_deg": -40.0, "el_deg": -10.0}
+    assert row_to_fields((1, 2, 0, 0))["z_m"] == 0.0              # height optional
+    m = replace(rig().sensors[0], **f)
+    assert fields_to_row(m) == (-8.0, 15.0, 40.0, -10.0, 7.0)
+    for bad in [(1, 2, 3), (0, 0, 0, 95)]:
+        try:
+            row_to_fields(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted bad row {bad}")
+
+
+def test_rigs_load_geometry_from_layout_file():
+    # the real, hand-edited layout: only check that it loads into sane values
+    from geometry.layout import row_to_fields
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("sl", ROOT / "config" / "sensor_layout.py")
+    sl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sl)
+    real = load_mounts(ROOT / "config" / "cap_mounts.json")
+    assert [m.id for m in real.sensors] == ["S1", "S2", "S3", "S4", "S5", "S6"]
+    for m in real.sensors:
+        f = row_to_fields(sl.CAP[m.id])
+        assert (m.az_deg, m.el_deg, m.x_m, m.y_m, m.z_m) == (f["az_deg"], f["el_deg"], f["x_m"], f["y_m"], f["z_m"])
+        assert -180 <= m.az_deg <= 180 and -90 <= m.el_deg <= 90 and abs(m.x_m) < 0.5 and abs(m.y_m) < 0.5
+    flat = load_mounts(ROOT / "config" / "flat_mounts.json")
+    assert [m.roll_deg for m in flat.sensors] == [0, 0, 0, 180, 180, 180]     # advanced settings kept
+    assert flat.sensors[3].z_m == -0.02 and flat.sensors[2].y_m == 0.025
 
 
 def test_mpu6050_is_a_stub():

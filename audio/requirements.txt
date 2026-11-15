@@ -1,4 +1,5 @@
 numpy
+slab
 scipy
 soundfile
 sounddevice

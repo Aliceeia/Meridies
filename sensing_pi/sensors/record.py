@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Record six VL53L5CX sensors (2 x 3 grid) as one combined frame. Pi only.
+"""Raw sensor stream: read the six VL53L5CX sensors as one combined frame. Pi only.
 
 Brings the sensors up one at a time with their LPn lines, moves them to 0x30-0x35,
-then reads each one when its INT line fires (driver: sensing_pi/sensors/tof6.py).
-
-Run from sensing_pi/:
-  .venv/bin/python tests/multi6/tof6_record.py --csv rec.csv --serve 5557
+then reads each one when its INT line fires (driver: sensors/tof6.py).
+main.py runs this for you; to run it on its own, from sensing_pi/:
+  .venv/bin/python -m sensors.record --serve 5557 [--csv rec.csv] [--allow-missing]
 """
 import argparse
 import csv
@@ -13,12 +12,10 @@ import sys
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parents[1]))  # sensing_pi/
-import tof6_common as C  # noqa: E402
-from netio import JsonLineServer  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # sensing_pi/, also when run as a file
+from sensors import frames as C  # noqa: E402
 from sensors.tof6 import Tof6  # noqa: E402
+from streams.netio import JsonLineServer  # noqa: E402
 
 
 def parse_args():
@@ -29,13 +26,17 @@ def parse_args():
     p.add_argument("--csv", help="write every combined frame to this CSV")
     p.add_argument("--serve", type=int, metavar="PORT", help="stream frames as JSON lines over TCP on this port")
     p.add_argument("--no-int", action="store_true", help="ignore INT pins and poll every sensor over I2C")
+    p.add_argument("--allow-missing", action="store_true",
+                   help="keep going if a sensor isn't found; its zones are sent as invalid")
     return p.parse_args()
 
 
 def main():
     a = parse_args()
     log = lambda msg: print(msg, flush=True)  # noqa: E731
-    tof = Tof6(res=a.res, hz=a.hz, use_int=not a.no_int, log=log)
+    tof = Tof6(res=a.res, hz=a.hz, use_int=not a.no_int, log=log, allow_missing=a.allow_missing)
+    if tof.missing:
+        log(f"running WITHOUT {', '.join(f'S{k + 1}' for k in tof.missing)}")
 
     writer = csv_file = None
     if a.csv:
@@ -77,6 +78,9 @@ def main():
     el = time.monotonic() - t_start
     print(f"\n--- {n_frames} combined frames in {el:.1f} s")
     for k in range(C.N_SENSORS):
+        if k in tof.missing:
+            print(f"S{k + 1}: MISSING (not found at start)")
+            continue
         warn = "  <- no INT edges: check INT wire" if not a.no_int and tof.int_edges[k] == 0 else ""
         print(f"S{k + 1}: {tof.reads[k]} reads, {tof.errors[k]} errors, {tof.int_edges[k]} INT edges{warn}")
     if a.csv:

@@ -1,23 +1,27 @@
 """Synthetic checks for the object pipeline on both rigs. Run from sensing_pi/:
-    .venv/bin/python tests/objects/test_objects.py
+    .venv/bin/python tests/test_objects.py        (or all tests: .venv/bin/python tests/run_all.py)
 (also works under pytest)."""
 import json
 import math
-import sys
-from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
-from geometry import load_mounts  # noqa: E402
-from geometry.transform import to_angles, zone_rays  # noqa: E402
-from objects import REQUIRED, ObjectPipeline  # noqa: E402
-from sim.scene import Plane, Pole, render, scene_shapes  # noqa: E402
+from fixtures import ROOT, cap_rig, flat_rig
+from geometry import load_mounts
+from geometry.transform import to_angles, zone_rays
+from objects import REQUIRED, ObjectPipeline
+from sim.scene import Plane, Pole, render, scene_shapes
 
-FLAT = load_mounts(ROOT / "config" / "flat_mounts.json")
-CAP = load_mounts(ROOT / "config" / "cap_mounts.json")
+FLAT = flat_rig()
+CAP = cap_rig()
 HZ = 10
+
+
+def test_real_cap_layout_runs():
+    """The hand-edited cap layout loads and the pipeline runs on it without errors."""
+    real = load_mounts(ROOT / "config" / "cap_mounts.json")
+    for _, w in run(real, lambda t: scene_shapes("corridor", t), n=4):
+        check_schema(w)
 
 
 def run(rig, shapes_at, n=6, noise_mm=8):

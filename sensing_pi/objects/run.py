@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""ToF frames -> objects -> top-3 warning list for the audio engine (ZMQ PUB tcp://*:5556).
+"""Object stream: ToF frames -> objects -> top-3 warning list for the audio engine (ZMQ PUB tcp://*:5556).
 
-Run from sensing_pi/:
-  .venv/bin/python run_objects.py --rig config/flat_mounts.json --source tcp:localhost:5557
-  .venv/bin/python run_objects.py --rig config/flat_mounts.json --source csv:rec.csv --no-pub
-  .venv/bin/python run_objects.py --rig config/cap_mounts.json  --source sim:corridor
+main.py runs this for you; to run it on its own, from sensing_pi/:
+  .venv/bin/python -m objects.run --rig config/flat_mounts.json --source tcp:localhost:5557
+  .venv/bin/python -m objects.run --rig config/flat_mounts.json --source csv:rec.csv --no-pub
+  .venv/bin/python -m objects.run --rig config/cap_mounts.json  --source sim:corridor
 Laptop debug view: python tools/objects_view.py --live <pi>:5558
 """
 import argparse
@@ -12,10 +12,11 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+ROOT = Path(__file__).resolve().parents[1]   # sensing_pi/
+sys.path.insert(0, str(ROOT))                 # also works when run as a file
 from geometry import LevelHead, MPU6050Source, load_mounts  # noqa: E402
 from objects import ObjectPipeline, load_cfg  # noqa: E402
-from sources import open_source  # noqa: E402
+from streams.sources import open_source  # noqa: E402
 
 
 def parse_args():
@@ -31,17 +32,24 @@ def parse_args():
     p.add_argument("--fast", action="store_true", help="csv/sim: don't wait for real time")
     p.add_argument("--frames", type=int, default=0, help="stop after N frames")
     p.add_argument("--quiet", action="store_true", help="no per-frame printout")
+    p.add_argument("--no-quality", action="store_true", help="turn off the sigma/signal filter and self-mask (to compare)")
+    p.add_argument("--no-body", action="store_true", help="turn off the body zone (to compare)")
     return p.parse_args()
 
 
 def main():
     a = parse_args()
-    here = Path(__file__).resolve().parent
-    rig = load_mounts(a.rig if Path(a.rig).exists() else here / a.rig)
+    rig = load_mounts(a.rig if Path(a.rig).exists() else ROOT / a.rig)
     cfg = load_cfg(a.cfg, rig=rig)
+    if a.no_quality:
+        cfg["quality"] = {**cfg.get("quality", {}), "enabled": False}
+    if a.no_body:
+        cfg["body_zone"] = {**cfg.get("body_zone", {}), "enabled": False}
     orientation = LevelHead() if a.imu == "level" else MPU6050Source()
     pipe = ObjectPipeline(rig, cfg, orientation)
 
+    print(pipe.quality.describe(), flush=True)
+    print(pipe.body.describe(), flush=True)
     audio = debug = None
     if not a.no_pub:
         from objects.publish import AudioPublisher
@@ -76,6 +84,9 @@ def main():
             debug.close()
     el = time.monotonic() - t_start
     print(f"\n--- {n} frames in {el:.1f} s ({n / el if el else 0:.1f}/s)")
+    print(pipe.quality.summary())
+    if pipe.body.enabled:
+        print(f"body zone removed {pipe.body.removed} points")
 
 
 if __name__ == "__main__":

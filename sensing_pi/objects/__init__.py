@@ -10,19 +10,24 @@ from __future__ import annotations
 from geometry.orientation import LevelHead, OrientationSource
 from geometry.transform import Rig, frame_to_points
 
+from .body import BodyZone
 from .cluster import cluster
 from .config import load_cfg
 from .describe import Obj, describe, split_corners
 from .localmap import LocalMap
+from .quality import QualityFilter
 from .rank import REQUIRED, rank
 from .scan import ScanPoint, bin_scan, cloud_to_points, reproject
 from .track import Tracker
 
 
 class ObjectPipeline:
-    def __init__(self, rig: Rig, cfg: dict | None = None, orientation: OrientationSource | None = None):
+    def __init__(self, rig: Rig, cfg: dict | None = None, orientation: OrientationSource | None = None,
+                 quality: QualityFilter | None = None):
         self.rig = rig
         self.cfg = cfg or load_cfg(rig=rig)
+        self.quality = quality or QualityFilter(self.cfg, rig)
+        self.body = BodyZone(self.cfg)
         self.orientation = orientation or LevelHead()
         self.has_imu = not isinstance(self.orientation, LevelHead)
         window = self.cfg["map_window_imu_s"] if self.has_imu else self.cfg["map_window_s"]
@@ -32,8 +37,10 @@ class ObjectPipeline:
 
     def step(self, frame: dict) -> tuple[list[Obj], list[dict]]:
         t = float(frame["t"])
+        frame = self.quality.apply(frame)          # sensor-flagged junk + learned self-mask -> invalid
         o = self.orientation.read()
         cloud = frame_to_points(frame, self.rig, orientation=o)
+        self.body.apply(cloud)                     # points on the wearer's shoulders/torso/arms -> invalid
         self.map.add(t, cloud_to_points(cloud, t, self.cfg))
         pts = self.map.points()
         reproject(pts, o if self.has_imu else None)

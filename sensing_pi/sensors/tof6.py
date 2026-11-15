@@ -4,7 +4,7 @@
         for frame in tof.frames():   # {"t", "res", "d": [6 x zones], "s": [6 x zones]}
             ...
 
-Pin map and addresses: sensors/pins.py (wiring chart in tests/multi6/README.md).
+Pin map and addresses: sensors/pins.py (wiring chart in docs/wiring.md).
 """
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from .pins import ADDRS, DEFAULT_ADDR, INT_PINS, LPN_PINS, N_SENSORS
 
 
 class Tof6:
-    def __init__(self, res: int = 8, hz: int | None = None, use_int: bool = True, log=print):
+    def __init__(self, res: int = 8, hz: int | None = None, use_int: bool = True, log=print,
+                 allow_missing: bool = False):
         import lgpio
         import vl53l5cx_ctypes as vl53
         from smbus2 import SMBus
@@ -27,6 +28,7 @@ class Tof6:
         self.log = log
         self.zones = res * res
         self.period = 1.0 / self.hz
+        self.allow_missing = allow_missing
 
         self.h = lgpio.gpiochip_open(0)
         self.bus = SMBus(1)
@@ -76,8 +78,14 @@ class Tof6:
                     sys.exit(f"{name}: failed to move 0x29 -> 0x{target:02x}")
                 how = "moved to"
             else:
-                sys.exit(f"{name}: nothing at 0x29 or 0x{target:02x} with LPn GPIO{LPN_PINS[k]} high. "
-                         f"Check its LPn wire, power and SDA/SCL.")
+                msg = (f"{name}: nothing at 0x29 or 0x{target:02x} with LPn GPIO{LPN_PINS[k]} high. "
+                       f"Check its LPn wire, power and SDA/SCL.")
+                if not self.allow_missing:
+                    sys.exit(msg)
+                self.log(f"{msg}  -> MISSING, its zones will read as invalid")
+                lgpio.gpio_write(self.h, LPN_PINS[k], 0)
+                sensors.append(None)
+                continue
 
             t0 = time.monotonic()
             s = vl53.VL53L5CX(i2c_addr=target, i2c_dev=self.bus, skip_init=True)
@@ -91,9 +99,14 @@ class Tof6:
         return sensors
 
     # ------------------------------------------------------------ run
+    @property
+    def missing(self) -> list[int]:
+        return [k for k, s in enumerate(self.sensors) if s is None]
+
     def start(self):
         for s in self.sensors:
-            s.start_ranging()
+            if s is not None:
+                s.start_ranging()
         self._ranging = True
 
     def frames(self):
@@ -104,6 +117,9 @@ class Tof6:
         z = self.zones
         dist = [[-1] * z for _ in range(N_SENSORS)]
         stat = [[0] * z for _ in range(N_SENSORS)]
+        sigma = [[0] * z for _ in range(N_SENSORS)]    # range_sigma_mm: the chip's own error estimate
+        signal = [[0] * z for _ in range(N_SENSORS)]   # signal_per_spad (kcps/SPAD): return strength
+        active = [k for k, s in enumerate(self.sensors) if s is not None]
         fresh = [False] * N_SENSORS
         now = time.monotonic()
         last_read = [now] * N_SENSORS
@@ -111,6 +127,8 @@ class Tof6:
         while True:
             now = time.monotonic()
             for k, s in enumerate(self.sensors):
+                if s is None:
+                    continue
                 # Read on an INT edge; if INT is off or broken, poll once the sensor is overdue.
                 if not (not self.use_int or self.flags[k] or now - last_read[k] > 3 * self.period):
                     continue
@@ -124,20 +142,25 @@ class Tof6:
                     continue
                 dist[k] = list(data.distance_mm[0][:z])
                 stat[k] = list(data.target_status[0][:z])
+                sigma[k] = list(data.range_sigma_mm[0][:z])
+                signal[k] = list(data.signal_per_spad[0][:z])
                 fresh[k] = True
                 self.reads[k] += 1
                 last_read[k] = now
 
-            if all(fresh) or (any(fresh) and now - last_emit > 2 * self.period):
+            if all(fresh[k] for k in active) or (any(fresh) and now - last_emit > 2 * self.period):
                 fresh = [False] * N_SENSORS
                 last_emit = now
                 yield {"t": round(time.time(), 4), "res": self.res,
-                       "d": [d[:] for d in dist], "s": [s_[:] for s_ in stat]}
+                       "d": [d[:] for d in dist], "s": [s_[:] for s_ in stat],
+                       "sigma": [x[:] for x in sigma], "signal": [x[:] for x in signal]}
             else:
                 time.sleep(0.001)
 
     def close(self):
         for s in self.sensors:
+            if s is None:
+                continue
             try:
                 s.stop_ranging()
             except Exception:
