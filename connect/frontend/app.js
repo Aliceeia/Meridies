@@ -508,20 +508,41 @@ async function playVoice(m) {
   const res = await fetch(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
   // a memory is the person's own recording: if there is none, say so; never read the transcript in a synthetic voice
   if (!res.ok) return toast(res.status === 404 ? "There's no recording for this one" : "Couldn't get that — try again");
-  const buf = await c.decodeAudioData(await res.arrayBuffer());
+  const bytes = await res.arrayBuffer();
+  // Short browser recordings (webm without a stated length) can make decodeAudioData fail or never finish.
+  // Then play the same file through a media element instead: same panner, so it still comes from its direction.
+  const buf = await Promise.race([c.decodeAudioData(bytes.slice(0)),
+                                  new Promise((_, no) => setTimeout(() => no(new Error("decode stalled")), 2500))]).catch(() => null);
   if (state.hatWarning) return;
   const p = (play.panner = makePanner());
   placePanner(p, m);
-  const g = (play.gain = c.createGain()), src = (play.src = c.createBufferSource());
-  src.buffer = buf;
+  const g = (play.gain = c.createGain());
   const t0 = c.currentTime;
   g.gain.setValueAtTime(0, t0);
   g.gain.linearRampToValueAtTime(1, t0 + FADE);
-  src.connect(g).connect(p);
+  g.connect(p);
+  let src;
+  if (buf) {
+    src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(g);
+    src.start(t0);
+  } else {
+    src = new Audio(URL.createObjectURL(new Blob([bytes], { type: res.headers.get("Content-Type") || m.audio_type || "audio/webm" })));
+    c.createMediaElementSource(src).connect(g);
+    src.stop = (when) => setTimeout(() => src.pause(), Math.max(0, (when - c.currentTime) * 1000));   // same API as a buffer source
+    try { await src.play(); } catch (e) {
+      console.warn("memory playback failed:", e.name);
+      return toast("This recording can't be played");
+    }
+  }
+  play.src = src;
   src.onended = () => { if (play.src === src) { play.src = null; play.playingId = null; updateNearUI(); } };
-  src.start(t0);
   play.playingId = m.id;
   updateNearUI();
+  // a take with no words (a tap of the record button, or a quiet room) would otherwise sound like nothing happened
+  if ((m.transcript || {}).no_speech && typeof speak === "function")
+    speak("No words in this one, just the sound of the place.", { kind: "short", force: true });
 }
 function stopVoice() {
   if (!play.src) return;
