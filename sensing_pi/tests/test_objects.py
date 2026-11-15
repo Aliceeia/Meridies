@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from fixtures import ROOT, cap_rig, flat_rig
+from fixtures import ROOT, cap_rig, flat_rig, pinned_cfg
 from geometry import load_mounts
 from geometry.transform import to_angles, zone_rays
 from objects import REQUIRED, ObjectPipeline
@@ -26,7 +26,7 @@ def test_real_cap_layout_runs():
 
 def run(rig, shapes_at, n=6, noise_mm=8):
     """Feed n frames; shapes_at(t) -> shapes. Returns per-frame (objs, warnings)."""
-    pipe = ObjectPipeline(rig)
+    pipe = ObjectPipeline(rig, pinned_cfg(rig))
     rng = np.random.default_rng(1)
     out = []
     for i in range(n):
@@ -156,6 +156,21 @@ def test_schema_all_scenes():
 def test_empty_scene_is_silent():
     objs, w = run(CAP, lambda t: [])[-1]
     assert objs == [] and w == []
+
+
+def test_short_blip_never_beeps_but_real_object_does():
+    """With min_fresh_frames = 3: a pole seen in one frame only (e.g. a shoulder during a head
+    turn) never beeps, even while the short-term map still holds it; one that stays beeps from
+    its 3rd frame."""
+    cfg = {**pinned_cfg(CAP), "min_fresh_frames": 3}
+    pole = Pole(0.6, 0.0)
+    rng = np.random.default_rng(1)
+    pipe = ObjectPipeline(CAP, cfg)
+    levels = [pipe.step(render(CAP, [pole] if i == 0 else [], t=i / HZ, rng=rng))[1] for i in range(4)]
+    assert all(w == [] for w in levels), levels
+    pipe = ObjectPipeline(CAP, cfg)
+    levels = [bool(pipe.step(render(CAP, [pole], t=i / HZ, rng=rng))[1]) for i in range(5)]
+    assert levels == [False, False, True, True, True], levels
 
 
 if __name__ == "__main__":

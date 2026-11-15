@@ -1,91 +1,111 @@
-# Laptop-side agent: view the ToF streams and hear the obstacle warnings
+# Laptop agent: run the laptop half of Meridies
 
-**You are:** an agent on the team's laptop.
-**The Pi** (`172.20.10.5`, phone hotspot network) runs `sensing_pi/main.py`, which starts two processes. You only **connect** to them:
+**You are** the agent on the team laptop. **The Pi** (`172.20.10.5`, on the phone hotspot) already runs its half. You run the parts that need the headset and the screen, and you only **connect** to the Pi.
 
-| Port on the Pi | What | Format | Producer on the Pi (started by `main.py`) |
-|---|---|---|---|
-| **5557** | raw sensor frames, about 9/s | TCP, one JSON line per frame: `{"t","res","d":[6×64 mm],"s":[6×64 status],"sigma","signal"}` | `python -m sensors.record --serve 5557 --allow-missing` |
-| **5556** | obstacle warnings, about 8/s | ZMQ PUB, one JSON **list** per message (≤3 entries, nearest first) | `python -m objects.run --rig config/cap_mounts.json --source tcp:localhost:5557` |
-| **5558** | object debug stream | TCP JSON lines `{"t","objects","warnings","points"}` | same `objects.run` |
+## What is already running on the Pi (don't start these)
 
-The sensors are in the **cap layout**: where each sensor sits and points is in `sensing_pi/config/sensor_layout.py` (`CAP` table; angle 0 = front, counter-clockwise, 90 = left). Background: `sensing_pi/docs/cap_layout.md`.
+| Port on the Pi | Service | Check |
+|---|---|---|
+| ZMQ **5556** | obstacle warnings (≤3, nearest first) from the six ToF sensors | `tools/feed_check.py` below |
+| TCP **5557** | raw sensor frames | `tools/feed_check.py --raw` |
+| TCP **5558** | object debug stream | `tools/feed_check.py` |
+| HTTP **8090** | cap camera: `/snapshot.jpg`, `/health`, live view at `/` | open http://172.20.10.5:8090/ |
+| HTTP **8080** | intro web experience | open http://172.20.10.5:8080/ |
 
-If a sensor isn't detected at start (loose wiring on the Pi side), its zones arrive as invalid. Don't try to fix that from the laptop.
+## What you run on the laptop
+
+| Part | Folder | Needs |
+|---|---|---|
+| A. Audio warning engine (spatial beeps from 5556) | `audio/` | wired headphones |
+| B. Voice agent (Gemini Live: see / feel distance / remember) | `voice_agent/` | headset mic + earphones, the Gemini key |
+| C. Memory layer (optional, for "what did I record…") | `connect/` | nothing extra |
+| D. Viewers (optional, for debugging/demo) | `sensing_pi/tools/` | a screen |
 
 ## Rules
-- **Don't publish or bind** on 5556, 5557 or 5558, so **don't run `audio/mock_warnings.py`** while the Pi is publishing. The audio engine only connects (ZMQ SUB), which is fine.
-- **Don't edit `sensing_pi/`.** It's owned by the Pi-side agent; report problems instead.
-- `audio/` changes follow `sensing_pi/docs/audio_integration_guide.md`. They're optional and not needed for this test.
+- **Never bind or publish on 5555–5558.** In particular **don't run `audio/mock_warnings.py`**, because it would fight the Pi for 5556. The engine and the agent only *subscribe*, which is fine.
+- **Don't edit `sensing_pi/`.** Report problems to the Pi side instead.
+- **Never commit the API key.** `voice_agent/.env` is git-ignored; keep it that way.
 
-## 0. Get the code
-1. **Preferred:** `git pull` on the **`sound-slab`** branch. Check that `sensing_pi/main.py`, `sensing_pi/tools/objects_view.py` and `sensing_pi/tools/feed_check.py` exist after pulling.
-2. **If they're missing,** copy the folder straight from the Pi (password or key for user `pi`):
-   ```bash
-   scp -r pi@172.20.10.5:~/meridies/HackPrinceton_2026/sensing_pi ./sensing_pi_from_pi
-   ```
-   Then run the tools from `sensing_pi_from_pi/`. Don't overwrite the repo's `sensing_pi/`.
+## 0. Code and network
+```bash
+git clone https://github.com/Aliceeia/HackPrinceton_2026.git   # or: cd HackPrinceton_2026 && git checkout main && git pull
+cd HackPrinceton_2026                                          # all paths below are relative to this
+ping -c 3 172.20.10.5                                          # laptop must be on the same hotspot
+```
+Use the **`main`** branch; it contains `audio/`, `voice_agent/`, `connect/` and `sensing_pi/`.
 
 ## 1. Python environment (once)
 ```bash
-python3 -m venv ~/tof-venv && source ~/tof-venv/bin/activate
-pip install numpy matplotlib pyzmq
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r audio/requirements.txt -r voice_agent/requirements.txt matplotlib pillow
 ```
-For the audio engine, also install `audio/requirements.txt` (slab, soundfile, sounddevice, pyzmq, numpy). On Linux, `sounddevice` needs PortAudio (`sudo apt install libportaudio2`). On macOS it's bundled.
+- **Linux:** `sounddevice` needs PortAudio: `sudo apt install libportaudio2`.
+- **macOS:** allow microphone access for the terminal, and allow incoming connections for Python if asked.
 
-## 2. Check the network and the feeds (run from `sensing_pi/`)
+## 2. Check the Pi feeds
 ```bash
-ping -c 3 172.20.10.5
-python tools/feed_check.py --host 172.20.10.5 --raw --secs 8
+python sensing_pi/tools/feed_check.py --host 172.20.10.5 --raw --secs 6
 ```
-**Expected:**
-- `5556 audio warnings: ~8/s, schema ok=True`
-- `5558 debug stream: ~8 msgs/s`
-- `5557 raw frames: ~9 msgs/s`
+**Expect** `5556 audio warnings: ~9/s, schema ok=True`, `5558 debug stream: ~9 msgs/s` and `5557 raw frames: ~9 msgs/s`. If any reads 0, check the hotspot and firewall, and ask the Pi side whether `sensing_pi/main.py` is running.
 
-**If something is 0:**
-- Confirm the laptop is on the same hotspot.
-- On macOS, allow incoming connections for Python if prompted.
-- Ask the Pi side whether `main.py` is still running.
-
-## 3. Raw view: grayscale 8×8 tiles
+## A. Audio warning engine (terminal 1)
 ```bash
-python tools/tof6_view.py --live 172.20.10.5:5557
+cd audio
+python tone_render.py                                   # once: makes audio/sounds/ (git-ignored)
+python engine.py --list-devices                         # find the wired headphones
+python engine.py --endpoint tcp://172.20.10.5:5556 --device "<part of the headphone name>"
 ```
-You'll see six tiles: near = white, far = black, invalid = dark red. A sensor that wasn't detected shows all dark red.
+- **What you should hear:** a beep from the direction of each obstacle. It gets faster as the obstacle gets closer, and adds an urgent cue under about 0.5 m.
+- **Silence** is normal when nothing is within about 1.5 m.
 
-The tile arrangement is the old bench 2×3 grid. It's only a display; on the cap the sensors point in the directions in `config/sensor_layout.py`. The top row is turned by default (`--top-tile rot180`); if a tile still looks upside-down, try `--tile flipy` or `--top-tile none`.
+## B. Voice agent (terminal 2)
+1. Get the key from the Pi into the (git-ignored) `.env`. Copy only that file:
+   ```bash
+   scp pi@172.20.10.5:~/meridies/gemini_voice_agent/.env voice_agent/.env
+   ```
+2. Start it:
+   ```bash
+   cd voice_agent
+   python agent.py --list-devices                       # find the headset mic and speaker
+   python agent.py --mic <N> --speaker <N>
+   ```
+3. What it uses by default (no flags needed):
+   - the camera at `http://172.20.10.5:8090/snapshot.jpg`
+   - the LiDAR warnings at `tcp://172.20.10.5:5556`
+   - the memory layer at `http://localhost:8765`
+4. Useful flags:
+   - `--text`: type instead of talking (a good first test)
+   - `--no-lidar`: don't use the LiDAR warnings
+   - `--camera webcam`: use the laptop camera instead of the cap's
+5. Things to say: "What am I looking at?", "What's around me?", "Read that sign.", "Take me to the door." ("stop" ends guidance)
 
-## 4. Object view: top-down map
+**If the beeps and the agent both play on the headset:** that's intended. The agent lowers its voice while an urgent warning is sounding. On Linux, use PipeWire/PulseAudio so both can share the device.
+
+## C. Memory layer (terminal 3, optional, start before B)
 ```bash
-python tools/objects_view.py --live 172.20.10.5:5558
+python connect/server.py            # from the repo root -> http://localhost:8765
 ```
-- The head is at the origin, with forward pointing up.
-- Grey dots are scan points. Coloured arcs are objects: red narrow, orange wide, purple facing wall, blue parallel wall.
-- Bold labels are the up to 3 objects being sent to the audio engine.
+- **Where it reads from:** `models_index.csv` and `.env` in the folder *above* the repo (`GEMINI_API_KEY`, plus `VEXCEL_API_KEY` for place descriptions).
+- **Memories** live in `connect/data/memories/` (git-ignored, so only what's on this laptop).
+- **Without it,** the agent still works and says it can't reach the memories.
 
-## 5. Sound
-From the repo's `audio/` folder:
+## D. Viewers (optional)
 ```bash
-python hrtf_render.py                                   # once; downloads KEMAR, writes audio/sounds/
-python engine.py --list-devices                         # pick the wired headphones if needed
-python engine.py --endpoint tcp://172.20.10.5:5556
+python sensing_pi/tools/objects_view.py --live 172.20.10.5:5558   # top-down map of objects and warnings
+python sensing_pi/tools/tof6_view.py --live 172.20.10.5:5557      # raw 8x8 grayscale tiles
 ```
-Use **wired headphones**.
+- Camera live view: http://172.20.10.5:8090/
+- Intro experience: http://172.20.10.5:8080/ (use headphones; it's spatial audio)
 
-## 6. What to test and report back
-For each item, report OK or not OK, plus what you saw:
-1. **Feeds:** paste the `feed_check.py` output.
-2. **Direction:** wearer holds a hand about 40 cm in front of each sensor in turn.
-   - The beep should come from that sensor's direction, and in the object view the object should appear near its angle. The angles are in `config/sensor_layout.py`; the object view shows az with + = right, so a layout angle of 75° (left) appears at about −75°.
-   - If left and right are swapped, the Pi side needs `zone_flip_h` or a mount fix; report which sensor.
-3. **Distance:** move the hand from 1.2 m to 0.3 m in front. The beep rate should rise, and below about 0.5 m (or when approaching quickly) the urgent chirp should play.
-4. **One voice per object:** a single hand should give a single steady voice, not several flickering ones. Report the ids shown in the object view.
-5. **Silence:** with nothing within about 1.5 m and nothing approaching, the sound should stop within about 0.5 s.
-6. **Walls:** stand about 0.4 m beside a wall, parallel to it. The object view should show `wall_parallel` and the level should be `"wall"`. It plays as a normal beep until the audio side adds a quiet wall sound.
-7. **Latency (optional):** film a hand and the sound in slow motion, and count the frames. The target is under 200 ms.
+## What to report back to the Pi side
+1. **Feeds:** the `feed_check.py` output.
+2. **Audio direction:** hold a hand about 40 cm in front of each cap sensor in turn. Does the beep come from that side? Which sensor, if not?
+3. **Distance:** move a hand from 1.2 m to 0.3 m. Does the beep speed up, and does the urgent cue start near 0.5 m?
+4. **Voice agent:** do "What am I looking at?" and "What's around me?" answer correctly? Roughly how long does each take?
+5. **Memory:** does a recall question work, if C was started?
+6. **Any errors**, pasted in full.
 
-**Known state at hand-off (2026-11-15):**
-- Noise cleanup is on: the sigma/signal filter, a self-mask learned standing in open space (it masks nothing for the cap as worn), and the body zone (shoulders, torso, arms).
-- Sensor wiring is still loose: S2, S3 and S6 have each dropped out at some point. A sensor missing at start shows as all dark red in the raw view.
-- Low surfaces 1–1.5 m to the sides (desks, chairs) give "warn" objects that often flicker or are labelled "narrow" rather than "wall"; that is a known tuning item.
+## Known state at hand-off (2026-11-15)
+- **Pi services:** all five Pi services were up and checked over the hotspot. All six ToF sensors are ranging at about 9.5 Hz.
+- **Loose sensor wiring:** a sensor (S3 or S6) sometimes drops out mid-run. The stream doesn't recover it by itself; the Pi side must restart `main.py`. You'll notice the warning rate falling to about 4–5/s and one direction going quiet.
+- **Low surfaces to the sides** (desks, chairs) at 1–1.5 m give "warn" objects. That's expected indoors.

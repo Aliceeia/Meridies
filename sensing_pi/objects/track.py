@@ -20,6 +20,7 @@ class Track:
     last_seen: float
     history: deque = field(default_factory=lambda: deque(maxlen=64))   # (t, raw nearest dist)
     level: str | None = None
+    fresh_hits: int = 0   # frames in which this object had readings from that very frame (not only held map points)
 
 
 def _slope(samples) -> float:
@@ -77,6 +78,7 @@ class Tracker:
         tr.az += a * (((o.az - tr.az + 180) % 360) - 180)
         tr.dist += a * (o.dist - tr.dist)
         tr.az_l, tr.az_r, tr.last_seen = o.az_l, o.az_r, t
+        tr.fresh_hits += any(abs(p.t - t) < 1e-6 for p in o.points)
         tr.history.append((t, o.dist))
         recent = [(ts, d) for ts, d in tr.history if t - ts <= c["ttc_window_s"] + 1e-6]
         closing = -_slope(recent) if len(recent) >= c["ttc_min_samples"] else 0.0

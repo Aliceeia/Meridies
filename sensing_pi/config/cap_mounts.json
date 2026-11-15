@@ -6,8 +6,9 @@
   "range_model": "radial",
   "min_range_m": 0.12,
   "floor_z_m": -1.55,
-  "zone_flip_h": false,
+  "zone_flip_h": true,
   "zone_flip_v": true,
+  "_zone_flip_note": "2026-11-15 hand test on the cap (S1): left/right came out mirrored, up/down correct -> zone_flip_h true. A pure mirror comes from the chip's zone numbering, so it applies to every board. zone_flip_v true from the desk test, confirmed by the hand test.",
   "objects": {
     "body_zone": {"enabled": true}
   },

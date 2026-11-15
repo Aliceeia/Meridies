@@ -6,9 +6,9 @@
   "range_model": "radial",
   "min_range_m": 0.10,
   "floor_z_m": null,
-  "zone_flip_h": false,
+  "zone_flip_h": true,
   "zone_flip_v": true,
-  "_zone_flip_note": "zone_flip_v from the 2026-11-14 live run: desk seen 7-14 cm BELOW the plate only with true. zone_flip_h not yet confirmed (hand test).",
+  "_zone_flip_note": "zone_flip_v from the 2026-11-14 live run: desk seen 7-14 cm BELOW the plate only with true. zone_flip_h true from the 2026-11-15 hand test on the cap (left/right mirrored); it is a property of the chip's zone numbering, so it is the same on the plate.",
   "sensors": [
     {"id": "S1", "roll_deg": 0,   "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
     {"id": "S2", "roll_deg": 0,   "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from fixtures import ROOT, cap_rig
+from fixtures import ROOT, cap_rig, pinned_cfg
 from geometry import load_mounts
 from geometry.calibrate import load_tof6_csv
 from objects import ObjectPipeline, load_cfg
@@ -17,7 +17,7 @@ from sensors import frames as C
 from sim.scene import Plane, render
 
 CAP = cap_rig()
-CFG = load_cfg(rig=CAP)
+CFG = pinned_cfg(CAP)
 Z = 64
 
 

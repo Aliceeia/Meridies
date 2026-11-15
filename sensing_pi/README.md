@@ -52,7 +52,8 @@ objects/           cleanup (quality.py, body.py) -> scan -> clusters -> objects 
                    outputs (publish.py), object stream program (run.py = python -m objects.run)
 streams/           frame sources (live / tcp / csv / sim) and the TCP JSON-line server
 sim/               ray-cast scene simulator (tests and --sim)
-tools/             helpers: laptop viewers (tof6_view.py, objects_view.py), feed_check.py, learn_selfmask.py
+tools/             helpers: laptop viewers (tof6_view.py, objects_view.py), feed_check.py, and the calibration
+                   tools learn_selfmask.py, hand_test.py (left/right, up/down), range_cal.py (wall distances)
 tests/             automated tests (run_all.py) and hardware bench checks (tests/hardware/)
 docs/              wiring, cap layout, object pipeline, guides for the audio side and the laptop agent
 ```

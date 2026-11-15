@@ -33,6 +33,8 @@ def rank(objs: list[Obj], c: dict) -> list[dict]:
     for o in objs:
         tr = o.extra.get("track")
         o.level = _level(o, tr.level if tr else None, c)
+        if tr and tr.fresh_hits < c.get("min_fresh_frames", 1):
+            o.level = None                              # a short blip (stray reading, shoulder): don't beep yet
         if tr:
             tr.level = o.level
         o.score = score(o, c)

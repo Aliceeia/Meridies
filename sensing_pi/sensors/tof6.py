@@ -13,6 +13,13 @@ import time
 
 from .pins import ADDRS, DEFAULT_ADDR, INT_PINS, LPN_PINS, N_SENSORS
 
+STALE_S = 0.5   # a sensor silent this long is treated as having no reading (about 5 missed frames)
+
+
+def stale_sensors(last_read: list[float], active: list[int], now: float, limit: float = STALE_S) -> set[int]:
+    """Sensors (indexes) that have not delivered a new reading for more than `limit` seconds."""
+    return {k for k in active if now - last_read[k] > limit}
+
 
 class Tof6:
     def __init__(self, res: int = 8, hz: int | None = None, use_int: bool = True, log=print,
@@ -48,6 +55,7 @@ class Tof6:
                     self.int_edges[k] += 1
                 self._callbacks.append(lgpio.callback(self.h, pin, lgpio.FALLING_EDGE, on_edge))
         self._ranging = False
+        self.stale: set[int] = set()   # sensors currently silent (see frames())
 
     # ------------------------------------------------------------ setup
     def _present(self, addr):
@@ -110,8 +118,10 @@ class Tof6:
         self._ranging = True
 
     def frames(self):
-        """Yield combined frames. A frame is emitted once all six have a new reading,
-        or after 2 periods (so one dead sensor can't freeze the stream)."""
+        """Yield combined frames. A frame is emitted once every live sensor has a new reading,
+        or after 2 periods (so one slow sensor can't freeze the stream). A sensor with no new
+        data for STALE_S seconds (e.g. it reset after a power dip) is sent as "no reading" instead
+        of repeating its last frame, and stops holding up the others until it reports again."""
         if not self._ranging:
             self.start()
         z = self.zones
@@ -148,11 +158,19 @@ class Tof6:
                 self.reads[k] += 1
                 last_read[k] = now
 
-            if all(fresh[k] for k in active) or (any(fresh) and now - last_emit > 2 * self.period):
+            stale = stale_sensors(last_read, active, now, STALE_S)
+            for k in stale - self.stale:
+                self.log(f"S{k + 1}: no data for {now - last_read[k]:.1f} s -> sending its zones as 'no reading'")
+            for k in self.stale - stale:
+                self.log(f"S{k + 1}: reporting again")
+            self.stale = stale
+            live = [k for k in active if k not in stale]
+            if (live and all(fresh[k] for k in live)) or (any(fresh) and now - last_emit > 2 * self.period):
                 fresh = [False] * N_SENSORS
                 last_emit = now
                 yield {"t": round(time.time(), 4), "res": self.res,
-                       "d": [d[:] for d in dist], "s": [s_[:] for s_ in stat],
+                       "d": [d[:] for d in dist],
+                       "s": [[0] * z if k in stale else s_[:] for k, s_ in enumerate(stat)],
                        "sigma": [x[:] for x in sigma], "signal": [x[:] for x in signal]}
             else:
                 time.sleep(0.001)

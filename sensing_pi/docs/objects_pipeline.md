@@ -41,7 +41,12 @@ It publishes on `tcp://*:5556`, the port `audio/engine.py` listens to, so start 
 3. Move the hand from chest height to above the plate. In the debug stream, `el` must go **up** (positive). If it goes down, set `zone_flip_v: true`.
 4. Repeat in front of the bottom row. If it disagrees with the top row, the `roll_deg` of the bottom row is wrong.
 
-**Current setting: `zone_flip_v: true` in both rig files** (live run on 2026-11-14). The desk lies 7–14 cm *below* the plate only with `true`, and the bottom row's lowest zones then hit it at about 0.30 m, as expected for a plate about 10 cm above the desk. `zone_flip_h` is still unconfirmed: do step 2 of the hand test.
+**Current setting: `zone_flip_h: true` and `zone_flip_v: true` in both rig files.**
+- `zone_flip_v` comes from the live run on 2026-11-14: the desk lies 7–14 cm *below* the plate only with `true`.
+- `zone_flip_h` comes from the hand test on the cap (S1) on 2026-11-15: left/right was mirrored and up/down was correct.
+- A pure mirror comes from the chip's zone numbering, not from how a board is mounted, so both apply to every board.
+
+The test is now a tool: `.venv/bin/python tools/hand_test.py --sensor S1` (with `main.py` running) walks you through it on screen and prints the verdict.
 
 ## Noise cleanup: quality filter and self-mask
 Before any geometry, `objects/quality.py` marks unreliable zones as invalid. Settings are in the `"quality"` block of `config/objects.json`.

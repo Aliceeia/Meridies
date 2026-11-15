@@ -3,14 +3,14 @@
 (also works under pytest)."""
 import numpy as np
 
-from fixtures import MEASURED_CAP, ROOT, cap_rig
+from fixtures import MEASURED_CAP, ROOT, cap_rig, pinned_cfg
 from geometry import load_mounts
 from objects import ObjectPipeline, load_cfg
 from objects.body import BodyZone
 from sim.scene import Plane, Pole, render
 
 RIG = cap_rig(MEASURED_CAP)
-CFG = load_cfg(rig=RIG)
+CFG = pinned_cfg(RIG)
 ARMS = [Pole(0.03, 0.27, r=0.05, z_min=-0.9, z_max=-0.15), Pole(0.03, -0.27, r=0.05, z_min=-0.9, z_max=-0.15)]
 
 

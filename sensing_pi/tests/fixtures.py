@@ -34,6 +34,23 @@ PLATE = {         # the flat bench plate
 }
 
 
+# Warning thresholds the tests were written against, so tuning config/objects.json (how close
+# things must be before it beeps) never changes what the tests check.
+TEST_THRESHOLDS = {
+    "warn_dist_m": 1.5, "clear_dist_m": 1.7, "urgent_dist_m": 0.5,
+    "warn_ttc_s": 2.0, "clear_ttc_s": 2.5, "urgent_ttc_s": 0.8,
+    "min_closing_mps": 0.1, "parallel_wall_dist_m": 0.5, "min_fresh_frames": 1,
+}
+
+
+def pinned_cfg(rig):
+    """Pipeline settings for `rig` (config/objects.json + rig overrides) with the pinned thresholds."""
+    from objects import load_cfg
+    cfg = load_cfg(rig=rig)
+    cfg.update(TEST_THRESHOLDS)
+    return cfg
+
+
 def cap_rig(rows=PLANNED_CAP):
     """cap_mounts.json settings with a fixed layout (and no learned self-mask)."""
     return with_rows(load_mounts(ROOT / "config" / "cap_mounts.json"), rows)
