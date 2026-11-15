@@ -132,7 +132,7 @@ function setBlind(on) {
     Object.assign(blind, { t0: performance.now(), reached: new Set(), heard: new Set() });
     blind.timer = setInterval(() => { if (play.playingId) blind.heard.add(play.playingId); }, 250);
     earcon("dark");
-    setTimeout(() => speak("Blindfold on. Arrows walk, W tells you where you are, Enter plays, M looks closer, Space to see again.", { kind: "help", force: true }), 500);
+    setTimeout(() => speak("Blindfold on. I'm listening: tell me where you want to go, or say help.", { kind: "help", force: true }), 500);
     blind.lastSig = "";
   } else {
     clearInterval(blind.timer);

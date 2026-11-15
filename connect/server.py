@@ -718,6 +718,22 @@ class Handler(BaseHTTPRequestHandler):
                 update(m["id"], lambda m: m.__setitem__("transcript", {"status": "pending"}))
             WORKER.submit(process, m["id"])
             return self.send(202, {"queued": m["id"]})
+        if parts == ["api", "hear"]:
+            # a short spoken command (blindfold voice control) -> its words. The clip is not kept anywhere.
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 2 * 2**20:
+                return self.err(400, "send a short audio clip (up to 2 MB)")
+            clip = self.rfile.read(n)
+            ctype = (self.headers.get("Content-Type") or "audio/wav").split(";")[0].strip()
+            from connect.backend import gemini
+            try:
+                text = gemini.generate([{"text": "Transcribe this short spoken command exactly, in English. Output only the "
+                                                 "words, nothing else. If nobody speaks, output nothing."},
+                                        gemini.image_part(clip, ctype)], timeout=12, retries=1)
+            except Exception as e:  # noqa: BLE001
+                print(f"  hear: {e!r}"[:120], flush=True)
+                return self.err(502, "couldn't hear that")
+            return self.send(200, {"text": text.strip().strip('"')})
         if parts == ["api", "tell-me-more"]:
             # the ONLY live AI call, and only on an explicit request
             try:

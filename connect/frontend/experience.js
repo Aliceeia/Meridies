@@ -192,13 +192,25 @@ onWalkerChange(async () => {
   if (key === onWalkerChange._lastSweep) return;
   onWalkerChange._lastSweep = key;
   arrivalBusy = true;
+  const routing = !!window.voiceRoute;              // decided now, not after the fetch (the route may end meanwhile)
   try {
     const r = await aroundMe("arrival", arrivalSig);
     arrivalSig = r.sig;
-    if (r.text) speak(r.text, { kind: "arrival" });
+    // on a spoken route ("take me to the kitchen") only hazards are said on the way; the destination is said at the end
+    if (r.text && (!routing || /\bmetres?\b/.test(r.text))) speak(r.text, { kind: "arrival" });
   } catch (_) { /* offline: the chimes still guide */ }
   arrivalBusy = false;
 });
+// at the end of a spoken route: where you are now, in full (as on a first arrival)
+window.announceArrival = async (extra = "") => {
+  const seq = Speech.seq;
+  try {
+    const r = await aroundMe("arrival", "");
+    arrivalSig = r.sig;
+    if (Speech.seq !== seq) return;      // the person already asked for something else: don't talk over it
+    speak([r.text, extra].filter(Boolean).join(" "), { kind: "arrival", force: true });
+  } catch (_) { if (extra) speak(extra, { kind: "short", force: true }); }
+};
 
 // "Tell me more": the ONE live AI call, only when asked (button or M). Directions come from the resolver, the
 // three sentences from Gemini (the render here + the notes within 5 m).

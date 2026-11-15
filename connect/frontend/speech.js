@@ -91,6 +91,7 @@
       if (!t) return "";
       if (!force && t === S.lastText && S.lastDone && Date.now() - S.lastDone < 20000) return "";   // already heard it
       S.cancel();
+      S.seq = (S.seq || 0) + 1;                        // lets a late, slower line know something newer was said
       const tok = { cut: false, audio: null, done: false };
       S.lastText = t; S.lastDone = 0; S.current = tok;
       tok.finish = () => {
@@ -138,8 +139,9 @@
       const a = (tok.audio = new Audio(url));
       a.preservesPitch = true;
       a.playbackRate = PACE[style] || 1;
-      let started = false;
-      const fallback = () => { if (!started && !tok.cut) S._tts(t, tok, kind); };
+      let started = false, fell = false;
+      // the error event AND the failed play() both land here: speak the fallback once, not twice
+      const fallback = () => { if (!started && !fell && !tok.cut) { fell = true; S._tts(t, tok, kind); } };
       a.onplaying = () => { started = true; };
       a.onended = () => tok.finish();
       a.onerror = fallback;
