@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import butter, fftconvolve, lfilter
+from scipy.signal import butter, fftconvolve, lfilter, sosfilt
 
 SOUNDS_DIR = Path(__file__).parent / "sounds"
 NUM_SLOTS = 3
@@ -25,7 +25,8 @@ NUM_SLOTS = 3
 # up from 0.35s to 0.45s to comfortably fit the longer tone (tone_render.py
 # beep is now 0.42s) without heavy tail-overlap at the fastest repeat rate.
 DIST_NEAR, DIST_FAR = 0.5, 1.5
-PERIOD_NEAR, PERIOD_FAR = 0.45, 1.3
+# Both ends slowed to 2/3 of the earlier beep rate (period x1.5, was 0.45 / 1.3 s).
+PERIOD_NEAR, PERIOD_FAR = 0.675, 1.95
 EASE_EXP = 1.6
 
 # Secondary "soothing" cue: a one-pole lowpass whose cutoff tracks distance,
@@ -198,11 +199,14 @@ class _Kemar:
         self.irs *= np.sqrt((ref ** 2).mean() / (new ** 2).mean())
         self.level_matched = True
 
-    def ir_for(self, az_deg, el_deg):
+    def idx_for(self, az_deg, el_deg):
         az = np.radians(az_deg)
         el = np.radians(min(max(el_deg, HRTF_EL_MIN), HRTF_EL_MAX))
         v = np.array([np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)])
-        return self.irs[int(np.argmax(self.dirs @ v))]
+        return int(np.argmax(self.dirs @ v))
+
+    def ir_for(self, az_deg, el_deg):
+        return self.irs[self.idx_for(az_deg, el_deg)]
 
 
 _KEMAR = None
@@ -220,16 +224,10 @@ def _kemar():
 # Why: the beep keeps ~96% of its energy below 250 Hz. Down there the head
 # casts almost no acoustic shadow (tiny ILD) and the pinna adds no
 # front/back/elevation colouring, so the HRTF alone has little to work
-# with. These cues add direction information without changing the tone:
+# with. These cues add direction information without changing the tone
+# (a broadband onset "tick" and Blauert directional bands on it were tried
+# and removed; see git history on the sound-slab branch):
 #
-#   tick  - a short, quiet broadband transient at every onset, run through
-#           the HRTF. Broadband transients are what HRTFs localise best. It
-#           bypasses the voice's distance lowpass so its highs survive.
-#   bands - Blauert's "directional bands" on the tick: energy around 4 kHz
-#           (and 500 Hz) pulls perception to the front, around 1 kHz to the
-#           rear; a high-shelf cut behind mimics the pinna's shadow. Boosting
-#           these bands in generic HRTFs is reported to cut front/back
-#           confusion substantially.
 #   room  - Dolby Atmos binaural style "Near / Far" render modes by direction:
 #           front sources are drier (Near), rear sources more reverberant (Far).
 #   cutoff- the tone's distance lowpass opens up in front and closes behind
@@ -238,13 +236,8 @@ def _kemar():
 #           none naturally. Scales with sin(az), so back-left is still left.
 #
 # Every cue can be switched off here (or live in slab_spatial_test.py: `cues ...`).
-CUES = {"tick": True, "bands": True, "room": True, "cutoff": True, "ild": True}
+CUES = {"room": True, "cutoff": True, "ild": True, "hum": True}   # "hum": see HUM_* below
 
-TICK_S = 0.025
-TICK_GAIN = 0.35            # tick peak relative to the beep's peak
-FRONT_BANDS = [(4000.0, 10.0, 1.0), (500.0, 4.0, 1.0)]     # (Hz, dB, Q), scaled by frontness
-BACK_BANDS = [(1000.0, 10.0, 1.0)]                         # scaled by backness
-BACK_HIGHSHELF = (3000.0, -14.0)                           # (Hz, dB) behind
 ROOM_FRONT_DRY = 0.5        # front: wet x (1 - 0.5)
 ROOM_BACK_EXTRA = 0.30      # back: wet + 0.30
 CUTOFF_FRONT_X, CUTOFF_BACK_X = 1.6, 0.55
@@ -259,45 +252,6 @@ def front_back(az_deg):
     """(frontness, backness), each 0..1: 1 straight ahead / straight behind, 0 at the sides."""
     c = np.cos(np.radians(az_deg))
     return max(c, 0.0), max(-c, 0.0)
-
-
-def _biquad_peak(x, f0, gain_db, q, sr):
-    """RBJ cookbook peaking EQ."""
-    a_ = 10 ** (gain_db / 40)
-    w = 2 * np.pi * f0 / sr
-    al = np.sin(w) / (2 * q)
-    b = [1 + al * a_, -2 * np.cos(w), 1 - al * a_]
-    a = [1 + al / a_, -2 * np.cos(w), 1 - al / a_]
-    return lfilter(b, a, x)
-
-
-def _biquad_highshelf(x, f0, gain_db, sr):
-    """RBJ cookbook high shelf (slope 1)."""
-    a_ = 10 ** (gain_db / 40)
-    w = 2 * np.pi * f0 / sr
-    cw, al = np.cos(w), np.sin(w) / 2 * np.sqrt(2)
-    sa = 2 * np.sqrt(a_) * al
-    b = [a_ * ((a_ + 1) + (a_ - 1) * cw + sa), -2 * a_ * ((a_ - 1) + (a_ + 1) * cw),
-         a_ * ((a_ + 1) + (a_ - 1) * cw - sa)]
-    a = [(a_ + 1) - (a_ - 1) * cw + sa, 2 * ((a_ - 1) - (a_ + 1) * cw), (a_ + 1) - (a_ - 1) * cw - sa]
-    return lfilter(b, a, x)
-
-
-_TICK_CACHE = {}
-
-
-def _tick(sr):
-    """Fixed (seeded) band-limited noise burst, 1 ms attack, fast decay."""
-    if sr not in _TICK_CACHE:
-        n = int(TICK_S * sr)
-        noise = np.random.default_rng(7).standard_normal(n)
-        b, a = butter(2, [700.0 / (sr / 2), 12000.0 / (sr / 2)], btype="band")
-        x = lfilter(b, a, noise)
-        t = np.arange(n) / sr
-        env = np.minimum(t / 0.001, 1.0) * np.exp(-t / 0.006)
-        x *= env
-        _TICK_CACHE[sr] = x / np.abs(x).max()
-    return _TICK_CACHE[sr]
 
 
 def _room_wet(az_deg, dist_m):
@@ -318,7 +272,7 @@ def cutoff_factor(az_deg):
 
 def _dir_level(az_deg):
     """Front/back level trim that offsets the rear treatment's loss (see FRONT_TRIM_DB)."""
-    if not (CUES["cutoff"] or CUES["bands"] or CUES["room"]):
+    if not (CUES["cutoff"] or CUES["room"]):
         return 1.0
     f, b = front_back(az_deg)
     return 10 ** ((FRONT_TRIM_DB * f + BACK_COMP_DB * b) / 20)
@@ -340,6 +294,135 @@ def _hrtf(mono, az_deg, el_deg):
     return np.stack([fftconvolve(mono, ir[:, 0]), fftconvolve(mono, ir[:, 1])], axis=1)
 
 
+# --- Continuous presence hum ---
+#
+# Every active voice also carries a quiet, continuous bed of low-passed white
+# noise (no pitch), placed with the same HRTF + cues as its beeps. It says
+# "something is there, about this far" all the time, between the beeps,
+# without the alarm character of the tones. Level follows 1/distance
+# (continuous, not stepped), the lowpass opens up as the obstacle gets closer,
+# and it fades in/out when an obstacle appears/disappears. Direction changes
+# crossfade over one block so a moving obstacle glides instead of clicking.
+HUM_RMS_AT_REF = 0.025      # output RMS (per ear, straight ahead) at HUM_REF_DIST_M
+HUM_REF_DIST_M = 0.5
+HUM_MAX_GAIN = 2.0          # cap on the 1/d boost (reached at 0.25 m)
+HUM_CUTOFF_NEAR_HZ, HUM_CUTOFF_FAR_HZ = 700.0, 180.0   # over DIST_NEAR .. DIST_FAR
+HUM_ATTACK_S, HUM_RELEASE_S = 0.25, 0.35
+
+
+def hum_gain(dist_m):
+    return HUM_RMS_AT_REF * min(HUM_MAX_GAIN, HUM_REF_DIST_M / max(dist_m, 0.05))
+
+
+def hum_cutoff(dist_m, az_deg):
+    d = min(max(dist_m, DIST_NEAR), DIST_FAR)
+    t = (d - DIST_NEAR) / (DIST_FAR - DIST_NEAR)
+    return (HUM_CUTOFF_NEAR_HZ + t * (HUM_CUTOFF_FAR_HZ - HUM_CUTOFF_NEAR_HZ)) * cutoff_factor(az_deg)
+
+
+_HUM_NFFT = 4096
+_HUM_IR_PSD = {}     # hrtf idx -> |IR|^2 per ear
+_HUM_LP_PSD = {}     # (cutoff, sr) -> |lowpass|^2
+_HUM_NORM = {}       # (idx, cutoff, sr) -> norm
+
+
+def _hum_norm(idx, cutoff_hz, sr):
+    """RMS per ear (mean power of both ears) of unit white noise through
+    (HRIR idx x 4th-order lowpass at cutoff). Dividing by it makes the hum's
+    loudness independent of direction and cutoff, so it stays a clean distance
+    cue; the left/right balance within the pair is kept."""
+    key = (idx, cutoff_hz, sr)
+    if key not in _HUM_NORM:
+        if idx not in _HUM_IR_PSD:
+            _HUM_IR_PSD[idx] = np.abs(np.fft.rfft(_kemar().irs[idx], _HUM_NFFT, axis=0)) ** 2
+        if (cutoff_hz, sr) not in _HUM_LP_PSD:
+            from scipy.signal import sosfreqz
+            _, h = sosfreqz(butter(4, cutoff_hz / (sr / 2), output="sos"), worN=_HUM_NFFT // 2 + 1)
+            _HUM_LP_PSD[(cutoff_hz, sr)] = np.abs(h) ** 2
+        p = (_HUM_IR_PSD[idx] * _HUM_LP_PSD[(cutoff_hz, sr)][:, None]).mean()
+        _HUM_NORM[key] = float(np.sqrt(p))
+    return _HUM_NORM[key]
+
+
+def _ild_gains(az_deg):
+    """Power-preserving extra ILD only (no front/back level trim)."""
+    if not CUES["ild"]:
+        return 1.0, 1.0
+    s = np.sin(np.radians(az_deg))
+    gl, gr = 10 ** (-EXTRA_ILD_DB / 2 * s / 20), 10 ** (EXTRA_ILD_DB / 2 * s / 20)
+    norm = np.sqrt((gl * gl + gr * gr) / 2)
+    return gl / norm, gr / norm
+
+
+class Hum:
+    """Per-voice noise bed. State-carrying so it is seamless across blocks."""
+
+    def __init__(self, seed):
+        self.rng = np.random.default_rng(seed)
+        self.sos, self.cut, self.zi = None, None, None   # post-HRTF lowpass + its state
+        self.hist = None          # last (taps-1) mono samples, for block convolution
+        self.env = 0.0
+        self.gain = 0.0
+        self.key = None           # (hrtf idx, left gain, right gain) of the last block
+
+    def _key(self, az, el):
+        gl, gr = _ild_gains(az)
+        return _kemar().idx_for(az, el), float(gl), float(gr)
+
+    def _binaural(self, x, key, cut, sr):
+        ir = _kemar().irs[key[0]]
+        n = 1.0 / _hum_norm(key[0], cut, sr)
+        left = fftconvolve(x, ir[:, 0], mode="valid") * (key[1] * n)
+        right = fftconvolve(x, ir[:, 1], mode="valid") * (key[2] * n)
+        return np.stack([left, right], axis=1)
+
+    def _post_lowpass(self, y, c, sr):
+        """Steep lowpass AFTER the HRTF (KEMAR boosts ~3 kHz, which would turn a
+        gently filtered noise into hiss). Level normalisation is in _binaural."""
+        if c != self.cut:
+            self.sos = butter(4, c / (sr / 2), output="sos")
+            self.cut = c
+            if self.zi is None:
+                self.zi = np.zeros((self.sos.shape[0], 2, 2))
+        y, self.zi = sosfilt(self.sos, y, axis=0, zi=self.zi)
+        return y
+
+    def block(self, n, sr, active, az, el, dist):
+        if not CUES["hum"] or SPATIALIZER != "hrtf":
+            self.env, self.hist, self.key, self.zi = 0.0, None, None, None
+            return None
+        target = 1.0 if active else 0.0
+        if self.env == 0.0 and target == 0.0:
+            self.hist, self.key, self.zi = None, None, None
+            return None
+        # envelope (per-sample ramp toward on/off)
+        step = n / sr / (HUM_ATTACK_S if target > self.env else HUM_RELEASE_S)
+        env_new = min(target, self.env + step) if target > self.env else max(target, self.env - step)
+        env = np.linspace(self.env, env_new, n, endpoint=False)
+        self.env = env_new
+        # gain ramp (distance), so dragging an obstacle never zippers
+        g_new = hum_gain(dist)
+        gain = np.linspace(self.gain if self.gain else g_new, g_new, n, endpoint=False)
+        self.gain = g_new
+        # white noise (unit RMS) with the envelope and distance gain
+        x = self.rng.standard_normal(n) * env * gain
+        # direction: convolve with history so block edges are seamless
+        taps = _kemar().irs.shape[1]
+        if self.hist is None:
+            self.hist = np.zeros(taps - 1)
+        buf = np.concatenate([self.hist, x])
+        self.hist = buf[-(taps - 1):]
+        key = self._key(az, el)
+        cut = int(round(min(hum_cutoff(dist, az), 0.45 * sr) / 10.0)) * 10   # 10 Hz steps
+        out = self._binaural(buf, key, cut, sr)
+        if self.key is not None and self.key != key:   # moved: crossfade old -> new placement
+            fade = np.linspace(0.0, 1.0, n)[:, None]
+            out = self._binaural(buf, self.key, cut, sr) * (1 - fade) + out * fade
+        self.key = key
+        # low "hum": steep lowpass after the HRTF, cutoff opens as it gets closer
+        return self._post_lowpass(out, cut, sr).astype(np.float32)
+
+
 def spatialize(dry_mono, az_deg, dist_m, sr, el_deg=0.0):
     """Dry mono tone -> stereo at (az, el, dist). az: 0 = ahead, + right,
     full 360; el: + up. Called once per onset from the obstacle's current position."""
@@ -350,26 +433,6 @@ def spatialize(dry_mono, az_deg, dist_m, sr, el_deg=0.0):
         raise ValueError(f"tones are {sr} Hz but the KEMAR HRTF is {k.sr} Hz; re-render at {k.sr}")
     mono_mix = _distance_mix(dry_mono, dist_m, sr, wet=_room_wet(az_deg, dist_m))
     return _extra_ild(_hrtf(mono_mix, az_deg, el_deg), az_deg).astype(np.float32)
-
-
-def spatialize_tick(az_deg, dist_m, sr, el_deg=0.0, ref_peak=1.0):
-    """The broadband direction tick for one onset (stereo), or None when off.
-    Not passed through the voice's distance lowpass."""
-    if SPATIALIZER != "hrtf" or not CUES["tick"]:
-        return None
-    x = _tick(sr) * (TICK_GAIN * ref_peak)
-    if CUES["bands"]:
-        f, b = front_back(az_deg)
-        for f0, db, q in FRONT_BANDS:
-            if f > 0:
-                x = _biquad_peak(x, f0, db * f, q, sr)
-        for f0, db, q in BACK_BANDS:
-            if b > 0:
-                x = _biquad_peak(x, f0, db * b, q, sr)
-        if b > 0:
-            x = _biquad_highshelf(x, BACK_HIGHSHELF[0], BACK_HIGHSHELF[1] * b, sr)
-    mono = _distance_mix(x, dist_m, sr, wet=_room_wet(az_deg, dist_m))
-    return _extra_ild(_hrtf(mono, az_deg, el_deg), az_deg).astype(np.float32)
 
 
 def spatialize_itd_ild(dry_mono, az_deg, dist_m, sr):
@@ -421,7 +484,6 @@ class VoiceSlot:
         self.period_samples = None
         self.next_onset_sample = 0
         self.playing = []  # list of [buffer, playhead] for overlapping bursts
-        self.playing_bypass = []  # direction ticks: same format, skip the lowpass
         # two cascaded one-pole stages = ~12dB/oct rolloff, steep enough to
         # actually hear over an ~85ms burst (a single stage was too gentle).
         # zi = scipy lfilter's carried-over filter state between blocks,
@@ -429,6 +491,7 @@ class VoiceSlot:
         self.lpf_zi1 = np.zeros((1, 2))
         self.lpf_zi2 = np.zeros((1, 2))
         self.lpf_alpha = 0.0
+        self.hum = Hum(seed=slot_num)
 
     def assign(self, obstacle, samplerate, now_sample):
         new_id = obstacle["id"]
@@ -473,7 +536,7 @@ class VoiceSlot:
 # above it, keep the previous ordering rather than swapping voice timbres —
 # prevents two near-tied obstacles from flicker-swapping which voice they're
 # heard as every ~50ms.
-RANK_HYSTERESIS_M = 0.08
+RANK_HYSTERESIS_M = 0.30
 
 
 def _overlap_add(playing, n_frames):
@@ -499,8 +562,6 @@ class Mixer:
         self.sr = samplerate or sound_bank.samplerate
         if SPATIALIZER == "hrtf":
             _kemar().match_level(sound_bank.beep_dry, self.sr)  # load now, not in the first callback
-        # tick level reference: the beep's peak after spatializing straight ahead at 1 m
-        self._beep_peak = float(np.abs(spatialize(sound_bank.beep_dry, 0.0, 1.0, self.sr)).max())
         self.slots = [VoiceSlot(i + 1) for i in range(NUM_SLOTS)]
         self.sample_counter = 0
         self._last_order = []  # list of obstacle ids, slot-index order
@@ -552,17 +613,15 @@ class Mixer:
                         mixed[: len(urgent_buf)] += urgent_buf
                         buf = mixed
                     slot.playing.append([buf, -offset_in_block if offset_in_block else 0])
-                    tick = spatialize_tick(slot.az, slot.dist, self.sr, slot.el, self._beep_peak)
-                    if tick is not None:
-                        slot.playing_bypass.append([tick, -offset_in_block if offset_in_block else 0])
                     slot.next_onset_sample += slot.period_samples
 
             voice_contribution, slot.playing = _overlap_add(slot.playing, n_frames)
             if slot.lpf_alpha > 0:
                 voice_contribution = slot.apply_lpf(voice_contribution)
             out += voice_contribution
-            ticks, slot.playing_bypass = _overlap_add(slot.playing_bypass, n_frames)
-            out += ticks
+            hum = slot.hum.block(n_frames, self.sr, slot.active, slot.az, slot.el, slot.dist)
+            if hum is not None:
+                out += hum
 
         self.sample_counter = block_end
         peak = np.max(np.abs(out))

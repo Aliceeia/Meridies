@@ -12,9 +12,9 @@ At the prompt:
     s [D] [SECS] [EL]  round sweep: one full circle clockwise from ahead
                        (ahead -> right -> behind -> left -> ahead), default 1 m, 8 s, el 0
     fb [AZ] [D]        front/back pair: AZ then its mirror behind (180-AZ), twice; default 0 deg, 1 m
-    cues               show the extra direction cues (tick bands room cutoff ild)
+    cues               show the extra cues (room cutoff ild) and the hum layer
     cues on | off      all of them on / off (off = plain HRTF, for A/B)
-    cues -NAME +NAME   switch single cues, e.g.  cues -ild +tick
+    cues -NAME +NAME   switch single cues, e.g.  cues -hum +ild
     q                  quit
 
 Under 0.5 m the obstacle is sent as "urgent", so the urgent cue plays too.
