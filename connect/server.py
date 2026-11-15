@@ -868,6 +868,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # On Windows, SO_REUSEADDR lets a second server bind the same port and silently share it with an old one
+    # (requests then hit stale code). Refuse instead.
+    ThreadingHTTPServer.allow_reuse_address = False
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        sys.exit(f"port {PORT} is already in use: another memory server is running. Stop it first.")
     print(f"memory layer on http://localhost:{PORT}   gallery /   hat /live   walk /walk")
     start_hat_relay()
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    httpd.serve_forever()
