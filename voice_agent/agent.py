@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import collections
 import math
 import struct
 import sys
@@ -36,11 +37,13 @@ from sensors import direction
 
 IN_RATE, OUT_RATE = 16000, 24000
 
-SYSTEM = """You are Meridies, a calm, warm voice assistant for a blind or low-vision person, speaking through \
+SYSTEM = """You are Meri (short for Meridies), a calm, warm voice assistant for a blind or low-vision person, speaking through \
 their headset in real time. They wear a cap with LiDAR distance sensors (which already beep for obstacles) and \
 a forward-facing camera. You are their eyes and their memory.
 
 Rules:
+- The person wakes you by saying "Hey Meri": that is just your name, not part of the request. Answer \
+only what follows it, and let them finish: requests can have short pauses in them.
 - Keep every answer short and spoken-friendly: one to three sentences. No lists, no markdown.
 - Body-relative directions only (ahead, slightly left, on your right, behind you). Never compass directions.
 - For anything about what is in front of them or around them, ALWAYS call the `look` tool, even if you looked \
@@ -50,6 +53,7 @@ Call `stop_guidance` when they say stop, they've arrived, or they ask for someth
 - Messages starting with [GUIDANCE] come from the guidance system, not the person: say the sentence in them \
 naturally and briefly, nothing else.
 - For questions about the past, places they've been, or what they or others recorded, call `recall_memories`.
+- If they say "stop" or "be quiet" and you aren't guiding them, just say "Okay."
 - Safety first: if a tool result mentions an urgent hazard, say that before anything else. You can't \
 guarantee safety; they should keep using their cane or dog.
 - Before a tool that takes a moment, you may say a two or three word filler like "Let me look."
@@ -145,6 +149,13 @@ class Agent:
         self.guide_task: asyncio.Task | None = None
         self.resume_handle = None
         self.obs.listeners.append(self._duck)
+        # wake word gate: the mic only reaches Gemini for a few seconds after "Hey Meri"
+        self.wake = None
+        self.gate_until = 0.0            # forward real mic audio until this time
+        self.preroll = collections.deque(maxlen=int(1.5 * IN_RATE / 512) + 2)   # ~1.5 s before the wake word
+        self.flush_preroll = False
+        self.generating = False          # the model is mid-answer
+        self.drop_output = False         # barge-in: discard the rest of the answer being interrupted
 
     def _duck(self, obs):
         # an obstacle warning from the hat outranks the voice: drop to 35% while anything is urgent
@@ -186,6 +197,8 @@ class Agent:
             self.guide_task = asyncio.create_task(self._guide(args.get("goal", "")))
             return {"status": "guidance started; instructions will follow automatically. Tell them briefly."}
         if name == "stop_guidance":
+            if not self.guide_task:
+                return {"status": "no guidance was running; they just want you to stop. Say only 'Okay.'"}
             self.stop_guidance()
             return {"status": "guidance stopped"}
         return {"error": f"unknown tool {name}"}
@@ -253,6 +266,9 @@ class Agent:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self.a.voice))),
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
+            # wait for a real pause before treating the request as finished (a request comes right after "Hey Meri")
+            realtime_input_config=types.RealtimeInputConfig(automatic_activity_detection=types.AutomaticActivityDetection(
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW, silence_duration_ms=800)),
             context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
             session_resumption=types.SessionResumptionConfig(handle=self.resume_handle),
         )
@@ -273,6 +289,10 @@ class Agent:
             self.web = self.spk = web_bridge.WebBridge(self.a.web, mic_q, text_q)
             await self.web.start()
         mic = None if (self.a.text or self.a.web) else mic_stream(loop, mic_q, self.a.mic)
+        if not (self.a.text or self.a.no_wake):
+            import wake
+            self.wake = wake.WakeWord(lambda: loop.call_soon_threadsafe(self._on_wake))
+            print('[wake] say "Hey Meri" to talk to the agent', flush=True)
         while True:   # reconnect (with resumption) when the server rotates the session
             try:
                 async with client.aio.live.connect(model=self.a.model, config=self.live_config()) as s:
@@ -280,8 +300,7 @@ class Agent:
                     self._fails = 0
                     print(f"[live] connected to {self.a.model}. " + ("Type and press Enter." if self.a.text
                           else "Talk in the browser." if self.a.web else "Talk into the headset. Ctrl+C to quit."))
-                    if self.web:
-                        self.web.send("status", "connected: listening")
+                    self._status()
                     sender = (self._send_text(s) if self.a.text else self._send_web(s, mic_q, text_q) if self.a.web
                               else self._send_mic(s, mic_q))
                     done, pending = await asyncio.wait([asyncio.create_task(sender),
@@ -313,9 +332,50 @@ class Agent:
             mic.stop()
 
     async def _send_mic(self, s, q):
+        blob = lambda b: types.Blob(data=b, mime_type=f"audio/pcm;rate={IN_RATE}")
         while True:
             pcm = await q.get()
-            await s.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={IN_RATE}"))
+            if not self.wake:                                  # --no-wake: open mic, as before
+                await s.send_realtime_input(audio=blob(pcm))
+                continue
+            self.wake.feed(pcm)
+            if self.flush_preroll:                             # the wake phrase + whatever followed it
+                self.flush_preroll = False
+                for chunk in list(self.preroll):
+                    await s.send_realtime_input(audio=blob(chunk))
+                self.preroll.clear()
+            self.preroll.append(pcm)
+            if time.time() < self.gate_until and not self.generating:
+                await s.send_realtime_input(audio=blob(pcm))
+            else:   # asleep or answering: silence keeps the session alive, and beeps/room noise can't interrupt
+                await s.send_realtime_input(audio=blob(bytes(len(pcm))))
+                if self.gate_until and time.time() >= self.gate_until and not self.generating:
+                    self.gate_until = 0.0
+                    self._status()
+
+    def _on_wake(self):
+        if self.generating or self.spk.busy:                   # barge-in: stop the current answer now
+            self.spk.clear()
+            self.drop_output = self.generating
+            self.generating = False
+        self.spk.tone(660, 0.07, 0.07); self.spk.tone(990, 0.09, 0.07)   # "I'm listening" earcon
+        self.gate_until = time.time() + self.a.listen_window
+        self.flush_preroll = True
+        self.ui("tool", "[wake] Hey Meri -> listening")
+        self._status()
+
+    def _status(self):
+        if not self.web:
+            return
+        if not self.wake:
+            msg = "listening"
+        elif self.generating:
+            msg = "answering"
+        elif time.time() < self.gate_until:
+            msg = "listening…"
+        else:
+            msg = 'asleep: say "Hey Meri"'
+        self.web.send("status", msg)
 
     async def _send_web(self, s, mic_q, text_q):
         async def typed():
@@ -350,26 +410,41 @@ class Agent:
                     print("[live] server asked to reconnect")
                     return "reconnect"
                 if msg.tool_call:
+                    if not self.drop_output:
+                        self._answering()
                     asyncio.create_task(self._run_tools(s, msg.tool_call))
                 sc = msg.server_content
                 if not sc:
                     continue
                 if sc.interrupted:                       # the person started talking: stop speaking now
                     self.spk.clear()
+                    self.drop_output = self.generating = False
+                    self.ui("tool", f"[live] INTERRUPTED (VAD heard input) after {''.join(said)[:80]!r}")
                 if sc.input_transcription and sc.input_transcription.text:
                     heard.append(sc.input_transcription.text)
                 if sc.output_transcription and sc.output_transcription.text:
                     said.append(sc.output_transcription.text)
-                if sc.model_turn:
+                if sc.model_turn and not self.drop_output:
                     for p in sc.model_turn.parts or []:
                         if p.inline_data and p.inline_data.data:
+                            self._answering()
                             self.spk.play(p.inline_data.data)
                 if sc.turn_complete:
+                    self.generating = self.drop_output = False
+                    # optional follow-up without the wake word (default 0 s: every request needs "Hey Meri")
+                    self.gate_until = time.time() + self.a.followup if self.a.followup else 0.0
+                    self._status()
                     if heard:
                         self.ui("you", ''.join(heard).strip())
                     if said:
                         self.ui("bot", ''.join(said).strip())
                     heard, said = [], []
+
+    def _answering(self):
+        if not self.generating:
+            self.generating = True
+            self.gate_until = 0.0          # the request is in: close the mic until the next "Hey Meri"
+            self._status()
 
     async def _run_tools(self, s, call):
         tick = asyncio.create_task(self._thinking())
@@ -401,6 +476,9 @@ def main():
     ap.add_argument("--mic", help="input device index/name (see --list-devices)")
     ap.add_argument("--speaker", help="output device index/name")
     ap.add_argument("--text", action="store_true", help="type instead of using the mic")
+    ap.add_argument("--no-wake", action="store_true", help="always listening (no 'Hey Meri' needed)")
+    ap.add_argument("--listen-window", type=float, default=8.0, help="seconds the mic stays open after 'Hey Meri'")
+    ap.add_argument("--followup", type=float, default=0.0, help="seconds to accept a follow-up without the wake word")
     ap.add_argument("--web", type=int, metavar="PORT", help="use the laptop browser as mic+speaker (http://localhost:PORT)")
     ap.add_argument("--mute", action="store_true", help="no audio output (print transcripts only)")
     ap.add_argument("--guide-interval", type=float, default=2.0, help="seconds between guidance steps")

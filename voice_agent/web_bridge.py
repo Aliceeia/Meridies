@@ -147,7 +147,7 @@ form{display:flex;gap:8px;margin-top:10px}input{flex:1;font:inherit;padding:10px
 <img id="cam" alt="live cap camera feed"></section>
 <section class="card"><div style="display:flex;align-items:center"><button id="go">Start talking</button><span id="status">not connected</span></div>
 <div id="meter"><div id="lvl"></div></div>
-<p style="color:var(--mut);font-size:13px">Try: "What am I looking at?", "Read that sign", "Guide me to the door", "What did I record here?"</p>
+<p style="color:var(--mut);font-size:13px">Say <b>"Hey Meri"</b> first, then: "what am I looking at?", "read that sign", "guide me to the door". You'll hear a rising two-tone chime when she's listening.</p>
 <div id="log"></div>
 <form id="f"><input id="t" placeholder="…or type a question" autocomplete="off"><button>Send</button></form></section>
 </main><script>

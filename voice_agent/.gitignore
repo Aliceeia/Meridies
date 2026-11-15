@@ -6,3 +6,4 @@ cache/
 camera.log
 agent.log
 certs/
+models/

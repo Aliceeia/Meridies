@@ -50,7 +50,15 @@ Optional: start the memory layer first (`python connect/server.py` from the memo
 
 Settings such as `PI_HOST`, `LIVE_MODEL`, `VISION_MODEL`, `VOICE` and `MEMORY_URL` can go in `.env`.
 
-## Things to say
+## Wake word: "Hey Meri"
+Meri only listens after you say **"Hey Meri"**. A rising two-tone chime means she's listening, and the mic stays open for one request (up to 8 s to start speaking). Saying "Hey Meri" while she's talking cuts her off.
+
+- Detection runs **offline on the Pi** with Vosk (`wake.py`), limited to the wake phrase plus decoys such as "hey everybody". It uses no Gemini quota, and audio isn't sent anywhere until the wake word is heard. The ~40 MB model downloads itself into `models/` on first run.
+- Until the wake word is heard, and while Meri is answering, Gemini receives **silence**. This is what fixed the answers cutting off mid-sentence: the LiDAR beeps leaked into the mic, and Gemini treated them as the person interrupting.
+- Flags: `--no-wake` (always listening, the old behaviour), `--listen-window 8`, and `--followup 0` (seconds to accept a follow-up without the wake word).
+- Measured on the Pi, with beeps mixed into the mic throughout: 6/6 wake phrases caught, 0/8 look-alikes triggered it, and 0 false interruptions during long answers.
+
+## Things to say (each one starts with "Hey Meri")
 - "What am I looking at?" / "What's in front of me?"
 - "Is there an empty chair?" / "Where's the door?" (find)
 - "Read that sign." / "What does this label say?" (read)
