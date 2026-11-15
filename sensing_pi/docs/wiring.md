@@ -44,7 +44,7 @@ Shared by all six (daisy-chain or a small bus strip):
 The pins are kept on the left column (LPn: pins 11, 13, 15) / right column (16, 18, 22) and the bottom of the header (INT: 29–37), so each group is easy to ribbon together. GPIO17 = S1 LPn is the same pin as the single-board test.
 
 ### How addressing works
-Every board powers up at 0x29. At start, `tof6_record.py` drives all six LPn **low**, which disables I2C on every board. It then raises one LPn at a time and moves that board to 0x30–0x35. Addresses survive until the power is cut, so re-running the script without a power cycle also works.
+Every board powers up at 0x29. At start, the raw stream (`main.py`, or `python -m sensors.record`) drives all six LPn **low**, which disables I2C on every board. It then raises one LPn at a time and moves that board to 0x30–0x35. Addresses survive until the power is cut, so re-running the script without a power cycle also works.
 
 ### Power
 The listing doesn't say whether this generic module has a regulator, and the VL53L5CX itself is a **3.3 V max** part. So:
@@ -61,8 +61,8 @@ The listing doesn't say whether this generic module has a regulator, and the VL5
 At 8×8, each frame is ~1.4 KB over I2C (~13 ms at 1 MHz). Six sensors share the bus, so the default is **10 Hz each at 8×8** (~80 % bus load). Use `--res 4` for 4×4 at 15–20 Hz.
 
 ### Check the wiring is right
-1. Run `i2cdetect -y 1` before the script: nothing, or only addresses 0x30–0x35 from a previous run. With LPn lines floating, boards may show at 0x29 or not at all; both are fine.
-2. Run the recorder. It prints which LPn/address each board came up on and counts INT edges per sensor. A sensor with 0 INT edges has a bad INT wire. It still works, because the script falls back to polling, but fix it.
+1. Run `.venv/bin/python tests/hardware/tof6_ping.py`. It wakes each board through its own LPn and reads its chip ID; it should end with "all six found, each controlled by its own LPn".
+2. Run the raw stream (`main.py --raw-only`). It prints which LPn/address each board came up on and counts INT edges per sensor. A sensor with 0 INT edges has a bad INT wire. It still works, because the code falls back to polling, but fix it.
 3. In the viewer, cover each sensor with a finger: the matching tile should go white. If the wrong tile reacts, the LPn wires are swapped.
 
 ## Running
@@ -70,24 +70,24 @@ At 8×8, each frame is ~1.4 KB over I2C (~13 ms at 1 MHz). Six sensors share the
 On the Pi, from `sensing_pi/`:
 
 ```bash
-.venv/bin/python tests/multi6/tof6_record.py --csv rec.csv --serve 5557
+.venv/bin/python main.py --raw-only --csv rec.csv
 ```
 
-Options: `--res 4|8`, `--hz N`, `--frames N`, `--no-int` (ignore INT, poll over I2C), `--csv FILE`, `--serve PORT`.
+(or the raw stream on its own: `.venv/bin/python -m sensors.record --serve 5557 --csv rec.csv`; options `--res 4|8`, `--hz N`, `--frames N`, `--no-int` (poll over I2C instead of INT), `--allow-missing`.)
 
 On a laptop (needs `pip install numpy matplotlib`), from the repo's `sensing_pi/`:
 
 ```bash
-python tests/multi6/tof6_view.py --live raspberrypi.local:5557
+python tools/tof6_view.py --live raspberrypi.local:5557
 ```
 
 ```bash
-python tests/multi6/tof6_view.py --file rec.csv
+python tools/tof6_view.py --file rec.csv
 ```
 
-Near = white, far = black, invalid zone = dark red. Options: `--max-mm 2000`, `--tile flipx|flipy|rot180|none` to match how the boards are mounted, `--speed 2` for playback.
+Near = white, far = black, invalid zone = dark red. Options: `--max-mm 2000`, `--tile flipx|flipy|rot180|none` to match how the boards are mounted, `--top-tile ...` for the top row, `--speed 2` for playback.
 
 ## Files
-- `tof6_common.py`: layout, CSV columns, and the mosaic builder (used on both the Pi and the laptop; no hardware imports).
-- `tof6_record.py`: Pi only. Brings up the six sensors, records CSV, and streams JSON lines over TCP.
-- `tof6_view.py`: laptop. Grayscale live view or playback.
+- `sensors/frames.py`: layout, CSV columns, and the mosaic builder (used on both the Pi and the laptop; no hardware imports).
+- `sensors/record.py`: Pi only. Brings up the six sensors, records CSV, and streams JSON lines over TCP.
+- `tools/tof6_view.py`: laptop. Grayscale live view or playback.

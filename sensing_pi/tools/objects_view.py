@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Top-down debug view of the object pipeline. Runs on a laptop (needs numpy + matplotlib, no zmq).
 
-  python tools/objects_view.py --live <pi-address>:5558      # stream from run_objects.py
+  python tools/objects_view.py --live <pi-address>:5558      # debug stream from main.py
 
 Head at the origin, forward = up. Grey dots = scan points, colour = object kind,
 thick outline + label = the (up to 3) warnings sent to the audio engine.

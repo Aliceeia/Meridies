@@ -1,4 +1,4 @@
-"""Wiring for the six VL53L5CX boards (BCM numbering). Chart: tests/multi6/README.md."""
+"""Wiring for the six VL53L5CX boards (BCM numbering). Chart: docs/wiring.md."""
 N_SENSORS = 6
 LPN_PINS = [17, 27, 22, 23, 24, 25]   # S1..S6
 INT_PINS = [5, 6, 13, 19, 26, 16]     # S1..S6

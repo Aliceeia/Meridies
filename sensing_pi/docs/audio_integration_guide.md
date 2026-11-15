@@ -1,12 +1,12 @@
 # Guide for the audio-side agent: consuming object warnings
 
 **Audience:** whoever owns `audio/` (Person B or their agent).
-**Status:** nothing here is required for the demo. `sensing_pi/run_objects.py` already speaks the current warning-list contract, and the engine works unchanged. These are suggested upgrades so the sound can carry what the new object layer knows.
+**Status:** nothing here is required for the demo. `sensing_pi/main.py` (its object stream, `objects/run.py`) already speaks the current warning-list contract, and the engine works unchanged. These are suggested upgrades so the sound can carry what the new object layer knows.
 **Rule:** the sensing side does not edit `audio/`; the audio side does not need to edit `sensing_pi/`.
 
 ## 1. What arrives now
-- **Transport:** ZMQ PUB at `tcp://*:5556`, bound by `run_objects.py`. The engine's SUB at `tcp://localhost:5556` works as-is. There's one JSON list per frame, at about 10 Hz (the sensor frame rate; the 0.5 s stale timeout is fine).
-- **The list:** at most 3 entries, **nearest first**. An empty list means silence. When `run_objects.py` exits it sends `[]`.
+- **Transport:** ZMQ PUB at `tcp://*:5556`, bound by the object stream (`main.py` → `objects/run.py`). The engine's SUB at `tcp://localhost:5556` works as-is. There's one JSON list per frame, at about 10 Hz (the sensor frame rate; the 0.5 s stale timeout is fine).
+- **The list:** at most 3 entries, **nearest first**. An empty list means silence. When the object stream exits it sends `[]`.
 
 | Field | Type | Meaning | Engine today |
 |---|---|---|---|
@@ -24,7 +24,7 @@
 
 **Mock without hardware:**
 ```
-cd sensing_pi && .venv/bin/python run_objects.py --rig config/cap_mounts.json --source sim:corridor
+cd sensing_pi && .venv/bin/python main.py --sim corridor
 ```
 Scenes: `wall`, `pole_sweep`, `approach`, `pole_wall`, `corridor`. This publishes realistic object lists on 5556, which is handy alongside `audio/engine.py`. Don't run `audio/mock_warnings.py` at the same time; both bind 5556.
 
@@ -68,7 +68,7 @@ The cap covers −107°…+107°. Entries beyond ±90° are currently clamped to
   - a malformed entry (`dist: null`) doesn't raise, if 2.4 is done
 
 ## 3. Notes for the integration owner (Person C)
-- For the VL53L5CX hardware, `sensing_pi/run_objects.py` **replaces** the sector-based selector (`integration/obstacle_select.py` on `memory-layer`). That selector expects six single-zone readings on port 5555; the TTC idea and thresholds are carried over in `sensing_pi/objects/track.py` and `objects/rank.py`.
+- For the VL53L5CX hardware, `sensing_pi/main.py` (object stream: `objects/run.py`) **replaces** the sector-based selector (`integration/obstacle_select.py` on `memory-layer`). That selector expects six single-zone readings on port 5555; the TTC idea and thresholds are carried over in `sensing_pi/objects/track.py` and `objects/rank.py`.
 - The old frozen frame `{"t", "mm": [6]}` on port 5555 isn't produced. If something still needs it, ask sensing for a small adapter. It would publish, per sensor, the nearest valid zone in the middle rows.
 - **Only one publisher on 5556.**
 - Head-rotation suppression (gyro > 60°/s) waits for the MPU6050 hook (`sensing_pi/geometry/orientation.py`).

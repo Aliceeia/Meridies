@@ -1,19 +1,16 @@
 """Synthetic checks for sensing_pi/geometry. Run from sensing_pi/:
-    .venv/bin/python tests/geometry/test_geometry.py
+    .venv/bin/python tests/test_geometry.py       (or all tests: .venv/bin/python tests/run_all.py)
 (also works under pytest)."""
 import math
-import sys
 from dataclasses import replace
-from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
-from geometry import (HeadOrientation, MPU6050Source, Rig, apply, basis, calibrate_mount,  # noqa: E402
+from fixtures import ROOT, cap_rig
+from geometry import (HeadOrientation, MPU6050Source, Rig, apply, basis, calibrate_mount,
                       direction, fit_range, frame_to_points, head_to_world, load_mounts, to_angles,
                       zone_angles)
-from geometry.transform import zone_rays  # noqa: E402
+from geometry.transform import zone_rays
 
 RES = 8
 
@@ -41,18 +38,8 @@ def simulate_wall(m, rig, normal, D, n_frames=5, noise_mm=0.0, seed=0):
     return frames
 
 
-# Fixed test layout (the planned cap from docs/cap_layout.md), so the tests don't change
-# when the real measurements in config/sensor_layout.py are edited.
-PLANNED_CAP = {
-    "S1": (-8.0, 15.0, 40.0, -10.0, 7.0), "S2": (0.0, 17.0, 0.0, -10.0, 7.0),
-    "S3": (8.0, 15.0, 320.0, -10.0, 7.0), "S4": (-9.0, 0.0, 85.0, -5.0, 8.0),
-    "S5": (0.0, 14.0, 0.0, -40.0, 6.0), "S6": (9.0, 0.0, 275.0, -5.0, 8.0),
-}
-
-
 def rig():
-    from geometry.layout import with_rows
-    return with_rows(load_mounts(ROOT / "config" / "cap_mounts.json"), PLANNED_CAP)
+    return cap_rig()   # planned cap layout, fixed (tests/fixtures.py)
 
 
 def test_direction_roundtrip():

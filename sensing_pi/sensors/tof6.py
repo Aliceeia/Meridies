@@ -4,7 +4,7 @@
         for frame in tof.frames():   # {"t", "res", "d": [6 x zones], "s": [6 x zones]}
             ...
 
-Pin map and addresses: sensors/pins.py (wiring chart in tests/multi6/README.md).
+Pin map and addresses: sensors/pins.py (wiring chart in docs/wiring.md).
 """
 from __future__ import annotations
 
@@ -117,6 +117,8 @@ class Tof6:
         z = self.zones
         dist = [[-1] * z for _ in range(N_SENSORS)]
         stat = [[0] * z for _ in range(N_SENSORS)]
+        sigma = [[0] * z for _ in range(N_SENSORS)]    # range_sigma_mm: the chip's own error estimate
+        signal = [[0] * z for _ in range(N_SENSORS)]   # signal_per_spad (kcps/SPAD): return strength
         active = [k for k, s in enumerate(self.sensors) if s is not None]
         fresh = [False] * N_SENSORS
         now = time.monotonic()
@@ -140,6 +142,8 @@ class Tof6:
                     continue
                 dist[k] = list(data.distance_mm[0][:z])
                 stat[k] = list(data.target_status[0][:z])
+                sigma[k] = list(data.range_sigma_mm[0][:z])
+                signal[k] = list(data.signal_per_spad[0][:z])
                 fresh[k] = True
                 self.reads[k] += 1
                 last_read[k] = now
@@ -148,7 +152,8 @@ class Tof6:
                 fresh = [False] * N_SENSORS
                 last_emit = now
                 yield {"t": round(time.time(), 4), "res": self.res,
-                       "d": [d[:] for d in dist], "s": [s_[:] for s_ in stat]}
+                       "d": [d[:] for d in dist], "s": [s_[:] for s_ in stat],
+                       "sigma": [x[:] for x in sigma], "signal": [x[:] for x in signal]}
             else:
                 time.sleep(0.001)
 

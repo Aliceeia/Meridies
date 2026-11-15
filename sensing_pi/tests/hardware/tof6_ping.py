@@ -5,7 +5,7 @@ For every sensor: hold all LPn low, raise only this one, find it at 0x29 (or its
 assigned 0x30-0x35 if it was already moved since power-up), read the chip ID
 (0xF0 / 0x02), and check its INT line idles high. No firmware upload, no address change.
 
-Run from sensing_pi/:  .venv/bin/python tests/multi6/tof6_ping.py
+Run from sensing_pi/:  .venv/bin/python tests/hardware/tof6_ping.py
 """
 import sys
 import time
@@ -103,7 +103,7 @@ def main():
         except OSError:
             print(f"\nparked board at {hex(PARK_ADDR)}: no answer")
     print("(INT level is informational: it only means something once the sensor is ranging; "
-          "tof6_record.py reports INT edges per sensor.)")
+          "the raw stream (main.py) reports INT edges per sensor.)")
 
     for pin in LPN_PINS:            # leave every board enabled, as after power-up
         lgpio.gpio_write(h, pin, 1)

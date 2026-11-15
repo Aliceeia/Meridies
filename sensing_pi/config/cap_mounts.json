@@ -8,6 +8,9 @@
   "floor_z_m": -1.55,
   "zone_flip_h": false,
   "zone_flip_v": true,
+  "objects": {
+    "body_zone": {"enabled": true}
+  },
   "sensors": [
     {"id": "S1", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
     {"id": "S2", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},

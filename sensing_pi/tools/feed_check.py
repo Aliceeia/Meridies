@@ -68,7 +68,7 @@ def main():
 
     ok = True
     if len(msgs) < 2:
-        print(f"5556 audio warnings: only {len(msgs)} messages -> is run_objects.py running? firewall?")
+        print(f"5556 audio warnings: only {len(msgs)} messages -> is main.py running? firewall?")
         ok = False
     else:
         rate = (len(msgs) - 1) / (msgs[-1][0] - msgs[0][0])

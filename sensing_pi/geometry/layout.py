@@ -76,9 +76,11 @@ def load_layout(layout_file: Path, name: str) -> dict:
 
 def with_rows(rig, rows: dict):
     """Copy of `rig` with each sensor's geometry replaced by rows {id: (x_cm, y_cm, angle, tilt[, height])}.
-    Used by the tests so they don't depend on the hand-edited layout file."""
+    Used by the tests so they don't depend on the hand-edited layout file. The copy is not linked
+    to the rig json any more, so a self-mask learned for the real geometry is not applied to it."""
     from dataclasses import replace
-    return replace(rig, sensors=[replace(m, **row_to_fields(rows[m.id])) for m in rig.sensors])
+    extra = {k: v for k, v in rig.extra.items() if k != "_source"}
+    return replace(rig, extra=extra, sensors=[replace(m, **row_to_fields(rows[m.id])) for m in rig.sensors])
 
 
 def _main(argv):

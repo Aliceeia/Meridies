@@ -1,8 +1,8 @@
-"""Frame sources for run_objects.py. Each yields tof6 frames {"t", "res", "d", "s"}.
+"""Frame sources for the object runner (objects/run.py). Each yields frames {"t", "res", "d", "s", ...}.
 
-  live                 the six sensors directly (Pi only; don't run alongside tof6_record.py)
-  tcp:HOST:PORT        a running `tof6_record.py --serve PORT` (no I2C conflict)
-  csv:FILE             replay a tof6_record.py CSV in real time (add --fast to skip waiting)
+  live                 the six sensors directly (Pi only; don't run alongside the raw stream)
+  tcp:HOST:PORT        a running raw stream (main.py, or `-m sensors.record --serve PORT`), no I2C conflict
+  csv:FILE             replay a recording in real time (add --fast to skip waiting)
   sim:SCENE            ray-cast demo scene through the rig (wall, pole_sweep, approach, pole_wall, corridor)
 """
 from __future__ import annotations

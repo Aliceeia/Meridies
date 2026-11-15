@@ -49,7 +49,7 @@ Each VL53L5CX sees 45° × 45° in 8 × 8 zones (~5.6° per zone).
 
 - **Head-height band (S1–S3, S4, S6):** about 215° of horizontal coverage (−107.5° … +107.5°), with ~5° of overlap between neighbours and no gaps. That fixes the "gaps between 27° cones" risk in the work plan, which assumed VL53L1X. The −10° tilt points the band at eye-to-shoulder height (+22 cm to −64 cm at 1 m), which is what a cane misses.
 - **S5, tilted down 40°:** catches chest- and waist-height hazards such as tables, open drawers and railings. Its lower zones will also see the floor about 0.9–2 m ahead. The transform code drops floor hits with a fixed floor height for now; head pitch from the MPU6050 will make this accurate later.
-- **Same left/middle/right order as the 2 × 3 bench rig** (top row S1–S3 = brim, bottom row S4–S6 = left, down, right), so the wiring, `tof6_record.py` and the viewer need no changes.
+- **Same left/middle/right order as the 2 × 3 bench rig** (top row S1–S3 = brim, bottom row S4–S6 = left, down, right), so the wiring, the raw stream (`sensors/record.py`) and the viewer need no changes.
 - **Audio:** sounds are pre-rendered for −90° … +90°. Points beyond ±90° (only the outer half of S4/S6) are clamped to ±90°, which still reads as "beside you".
 
 ## Mounting notes
@@ -62,7 +62,7 @@ Each VL53L5CX sees 45° × 45° in 8 × 8 zones (~5.6° per zone).
 ## Calibration procedure
 Everything below lives in `geometry/calibrate.py`.
 
-1. **Zone orientation, once per mounting style:** hold a hand about 30 cm in front of a sensor and move it left → right, then up → down. Watch the tile in `tof6_view.py`. If the hand moves the wrong way, set `flip_h` / `flip_v` for that sensor. If left/right and up/down are swapped, set `roll_deg` to 90 or −90.
+1. **Zone orientation, once per mounting style:** hold a hand about 30 cm in front of a sensor and move it left → right, then up → down. Watch the tile in `tools/tof6_view.py`. If the hand moves the wrong way, set `flip_h` / `flip_v` for that sensor. If left/right and up/down are swapped, set `roll_deg` to 90 or −90.
 2. **Range, per sensor, on the bench:** point the sensor square at a wall at 0.5, 1.0 and 2.0 m and record about 50 frames each. `fit_range(...)` returns the `range_scale` and `range_offset_mm` for that sensor.
 3. **Mount angles, worn:** the wearer stands with head level, facing a wall at a measured distance D from the head centre. Record about 50 frames, then run `calibrate_mount(...)` for S1, S2, S3 and S5 with the wall `normal=(1,0,0), distance=D`. Then the wearer turns so the wall is on their left: run it for S4 with `normal=(0,-1,0)`. Turn so the wall is on the right: run it for S6 with `normal=(0,1,0)`. Each call returns the corrected `az, el` and the RMS error; the error should be under ~2 cm.
 4. Each `calibrate_mount` report includes a `layout_row` line in the `sensor_layout.py` format: paste it over that sensor's row. Range results (`range_scale`, `range_offset_mm`) go into `cap_mounts.json`, either by hand or with `save_mounts(...)`, which leaves the positions in the layout file alone.

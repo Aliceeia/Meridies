@@ -1,34 +1,20 @@
 """Synthetic checks for the object pipeline on both rigs. Run from sensing_pi/:
-    .venv/bin/python tests/objects/test_objects.py
+    .venv/bin/python tests/test_objects.py        (or all tests: .venv/bin/python tests/run_all.py)
 (also works under pytest)."""
 import json
 import math
-import sys
-from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
-from geometry import load_mounts  # noqa: E402
-from geometry.transform import to_angles, zone_rays  # noqa: E402
-from objects import REQUIRED, ObjectPipeline  # noqa: E402
-from sim.scene import Plane, Pole, render, scene_shapes  # noqa: E402
+from fixtures import ROOT, cap_rig, flat_rig
+from geometry import load_mounts
+from geometry.transform import to_angles, zone_rays
+from objects import REQUIRED, ObjectPipeline
+from sim.scene import Plane, Pole, render, scene_shapes
 
-from geometry.layout import with_rows  # noqa: E402
-
-# Fixed test layouts, so the tests don't change when config/sensor_layout.py is edited.
-PLANNED_CAP = {
-    "S1": (-8.0, 15.0, 40.0, -10.0, 7.0), "S2": (0.0, 17.0, 0.0, -10.0, 7.0),
-    "S3": (8.0, 15.0, 320.0, -10.0, 7.0), "S4": (-9.0, 0.0, 85.0, -5.0, 8.0),
-    "S5": (0.0, 14.0, 0.0, -40.0, 6.0), "S6": (9.0, 0.0, 275.0, -5.0, 8.0),
-}
-PLATE = {
-    "S1": (-2.5, 0.0, 0.0, 0.0, 2.0), "S2": (0.0, 0.0, 0.0, 0.0, 2.0), "S3": (2.5, 0.0, 0.0, 0.0, 2.0),
-    "S4": (-2.5, 0.0, 0.0, 0.0, -2.0), "S5": (0.0, 0.0, 0.0, 0.0, -2.0), "S6": (2.5, 0.0, 0.0, 0.0, -2.0),
-}
-FLAT = with_rows(load_mounts(ROOT / "config" / "flat_mounts.json"), PLATE)
-CAP = with_rows(load_mounts(ROOT / "config" / "cap_mounts.json"), PLANNED_CAP)
+FLAT = flat_rig()
+CAP = cap_rig()
+HZ = 10
 
 
 def test_real_cap_layout_runs():
@@ -36,7 +22,6 @@ def test_real_cap_layout_runs():
     real = load_mounts(ROOT / "config" / "cap_mounts.json")
     for _, w in run(real, lambda t: scene_shapes("corridor", t), n=4):
         check_schema(w)
-HZ = 10
 
 
 def run(rig, shapes_at, n=6, noise_mm=8):

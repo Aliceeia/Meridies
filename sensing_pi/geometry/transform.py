@@ -90,6 +90,7 @@ def load_mounts(path: str | Path) -> Rig:
 
     sensors = [Mount(**{k: v for k, v in s.items() if k in names}) for s in entries]
     extra = {k: v for k, v in raw.items() if k not in _RIG_KEYS + ("sensors",)}
+    extra["_source"] = str(path.resolve())   # lets the pipeline find config/selfmask_<stem>.json
     return Rig(sensors=sensors, extra=extra, **{k: raw[k] for k in _RIG_KEYS if k in raw})
 
 
@@ -97,7 +98,7 @@ def save_mounts(rig: Rig, path: str | Path) -> None:
     """Write a rig json. For a layout-based rig the positions/angles are NOT written (they live in
     the layout file); print them with geometry.layout.format_row and paste them there instead."""
     from .layout import GEOMETRY_FIELDS
-    out = dict(rig.extra)
+    out = {k: v for k, v in rig.extra.items() if k != "_source"}
     out.update({k: getattr(rig, k) for k in _RIG_KEYS})
     skip = set(GEOMETRY_FIELDS) if "layout" in rig.extra else set()
     out["sensors"] = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in asdict(m).items() if k not in skip}

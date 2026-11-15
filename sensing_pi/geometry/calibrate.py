@@ -1,47 +1,17 @@
 """Calibration for the cap's sensors: range scale/offset (bench) and mount angles (worn, facing a wall).
 
-Inputs are tof6 frames as produced by tests/multi6/tof6_record.py ({"res", "d", "s"}),
-e.g. loaded from its CSV with load_tof6_csv().
+Inputs are frames as produced by sensors/record.py ({"res", "d", "s"}), e.g. loaded from its
+CSV with load_tof6_csv() (= sensors.frames.load_csv).
 """
 from __future__ import annotations
 
-import csv
 from dataclasses import replace
-from pathlib import Path
 
 import numpy as np
 
+from sensors.frames import load_csv as load_tof6_csv  # noqa: F401  (kept under its old name)
+
 from .transform import VALID_STATUS, Mount, Rig, sensor_points
-
-
-def load_tof6_csv(path: str | Path) -> list[dict]:
-    """Read a tof6_record.py CSV into a list of frames."""
-    with open(path, newline="") as fh:
-        meta = dict(tok.split("=", 1) for tok in fh.readline().lstrip("#").split() if "=" in tok)
-        res = int(meta["res"])
-        z = res * res
-        rd = csv.reader(fh)
-        next(rd)
-        frames, bad = [], 0
-        for row in rd:
-            if not row:
-                continue
-            try:  # a recording cut off by a power loss ends in garbage / NUL bytes
-                t = float(row[0])
-                vals = [int(v) for v in row[1:]]
-            except ValueError:
-                bad += 1
-                continue
-            n = len(vals) // (2 * z)
-            if n == 0 or len(vals) != 2 * n * z:
-                bad += 1
-                continue
-            frames.append({"t": t, "res": res,
-                           "d": [vals[k * z:(k + 1) * z] for k in range(n)],
-                           "s": [vals[(n + k) * z:(n + k + 1) * z] for k in range(n)]})
-    if bad:
-        print(f"{path}: skipped {bad} malformed row(s)")
-    return frames
 
 
 def zone_medians(frames: list[dict], k: int, min_valid: float = 0.5) -> np.ndarray:

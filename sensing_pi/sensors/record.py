@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Record six VL53L5CX sensors (2 x 3 grid) as one combined frame. Pi only.
+"""Raw sensor stream: read the six VL53L5CX sensors as one combined frame. Pi only.
 
 Brings the sensors up one at a time with their LPn lines, moves them to 0x30-0x35,
-then reads each one when its INT line fires (driver: sensing_pi/sensors/tof6.py).
-
-Run from sensing_pi/:
-  .venv/bin/python tests/multi6/tof6_record.py --csv rec.csv --serve 5557
+then reads each one when its INT line fires (driver: sensors/tof6.py).
+main.py runs this for you; to run it on its own, from sensing_pi/:
+  .venv/bin/python -m sensors.record --serve 5557 [--csv rec.csv] [--allow-missing]
 """
 import argparse
 import csv
@@ -13,12 +12,10 @@ import sys
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parents[1]))  # sensing_pi/
-import tof6_common as C  # noqa: E402
-from netio import JsonLineServer  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # sensing_pi/, also when run as a file
+from sensors import frames as C  # noqa: E402
 from sensors.tof6 import Tof6  # noqa: E402
+from streams.netio import JsonLineServer  # noqa: E402
 
 
 def parse_args():

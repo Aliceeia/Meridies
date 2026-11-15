@@ -1,6 +1,24 @@
 {
   "_comment": "Object-pipeline tuning. A rig json can override any key under its own \"objects\": {...}. Distances in metres, angles in degrees, times in seconds.",
 
+  "quality": {
+    "_note": "Zone cleanup before geometry. Reject a reading if sigma > max(max_sigma_mm, max_sigma_rel x distance) or signal < min_signal (kcps/SPAD). From the 2026-11-15 live sample: good returns had sigma ~1% of distance and signal 8-40 at 1-4 m. self_mask uses config/selfmask_<rig>.json (tools/learn_selfmask.py).",
+    "enabled": true,
+    "max_sigma_mm": 15.0,
+    "max_sigma_rel": 0.03,
+    "min_signal": 3.0,
+    "self_mask": true
+  },
+
+  "body_zone": {
+    "_note": "Points inside these boxes are the wearer (shoulders, torso, arms) and are ignored. Head frame: origin = head centre at ear height, x forward, y right, z up, metres. mirror_y also applies the box on the other side. Off here; the cap rig switches it on.",
+    "enabled": false,
+    "boxes": [
+      {"name": "shoulders+torso", "x": [-0.22, 0.24], "y": [-0.26, 0.26], "z": [-1.30, -0.12]},
+      {"name": "arm",             "x": [-0.30, 0.40], "y": [0.16, 0.34],  "z": [-1.20, -0.16], "mirror_y": true}
+    ]
+  },
+
   "band_z_m": [-1.2, 0.4],
   "max_range_m": 4.0,
   "bin_deg": 3.0,

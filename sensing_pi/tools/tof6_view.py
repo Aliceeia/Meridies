@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Grayscale view of the 6 x VL53L5CX mosaic. Runs on a laptop (needs numpy + matplotlib).
 
-Live from the Pi:   python tests/multi6/tof6_view.py --live raspberrypi.local:5557
-Play a recording:   python tests/multi6/tof6_view.py --file rec.csv [--speed 2]
+Live from the Pi:   python tools/tof6_view.py --live raspberrypi.local:5557
+Play a recording:   python tools/tof6_view.py --file rec.csv [--speed 2]
 
 Near = white, far = black, invalid zone = dark red.
 Playback keys: space = pause/resume, left/right = step one frame while paused.
@@ -19,15 +19,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import tof6_common as C  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # sensing_pi/
+from sensors import frames as C  # noqa: E402
 
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = p.add_mutually_exclusive_group(required=True)
-    src.add_argument("--live", metavar="HOST[:PORT]", help="connect to tof6_record.py --serve (default port 5557)")
-    src.add_argument("--file", help="CSV written by tof6_record.py --csv")
+    src.add_argument("--live", metavar="HOST[:PORT]", help="connect to the raw stream (main.py / sensors.record, default port 5557)")
+    src.add_argument("--file", help="CSV written by main.py --csv / sensors.record --csv")
     p.add_argument("--max-mm", type=int, default=2000, help="distance shown as black (default 2000)")
     p.add_argument("--tile", choices=("none", "flipx", "flipy", "rot180"), default="none",
                    help="re-orient every 8x8 tile to match how the boards are mounted")
@@ -124,7 +124,7 @@ def run_file(a):
     with open(a.file, newline="") as fh:
         meta_line = fh.readline()
         if not meta_line.startswith("# tof6"):
-            sys.exit(f"{a.file} does not look like a tof6_record.py CSV")
+            sys.exit(f"{a.file} does not look like a ToF recording CSV")
         res = C.parse_meta(meta_line)["res"]
         rd = csv.reader(fh)
         next(rd)  # header

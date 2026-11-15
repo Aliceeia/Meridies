@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from netio import JsonLineServer
+from streams.netio import JsonLineServer
 
 
 class AudioPublisher:
