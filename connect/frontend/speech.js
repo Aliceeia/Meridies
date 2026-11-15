@@ -69,11 +69,18 @@
 
   // Delivery that doesn't depend on the TTS model: warnings brisker, descriptions unhurried. Audio playbackRate keeps
   // the pitch (preservesPitch), so this changes pace, not voice.
-  const PACE = { alert: 1.1, plain: 1.0, calm: 0.95 };
-  const TTS_RATE = { alert: 1.08, plain: 0.98, calm: 0.9 };
+  // (kept small: time-stretching a natural voice by much makes it sound processed)
+  const PACE = { alert: 1.05, plain: 1.0, calm: 1.0, mixed: 1.0 };
+  const TTS_RATE = { alert: 1.08, plain: 0.98, calm: 0.9, mixed: 1.0 };
+  // one delivery for a whole line: a hazard first and a description after is "mixed"
+  function lineStyle(sents, kind) {
+    const st = sents.map((s) => styleOf(s, kind));
+    if (st.every((x) => x === st[0])) return st[0];
+    return st[0] === "alert" ? "mixed" : st.includes("alert") ? "mixed" : st[0];
+  }
 
   const S = {
-    LIMITS, clean, shape, vary, seconds, styleOf, PACE,
+    LIMITS, clean, shape, vary, seconds, styleOf, lineStyle, PACE,
     useVoice: false,                                   // pages turn on the cached human voice (/api/voice)
     muted: () => false,                                // a page can mute speech (e.g. while the hat warns)
     tone: null,                                        // a page can give oops() its error tone
@@ -100,26 +107,37 @@
     // browser voice (never two voices in one line); the server makes the missing clips for next time.
     _clips(t, kind, tok) {
       const sents = t.split(/(?<=[.!?…])\s+/).filter(Boolean);
-      const styles = sents.map((s) => styleOf(s, kind));
-      Promise.all(sents.map((s, i) => fetch(`/api/voice?text=${encodeURIComponent(s)}&style=${styles[i]}`)
-        .then((r) => (r.ok ? r.blob() : null)).catch(() => null)))
-        .then((blobs) => {
+      const whole = lineStyle(sents, kind);
+      const get = (text, style, queue) => fetch(`/api/voice?text=${encodeURIComponent(text)}&style=${style}${queue ? "" : "&queue=0"}`)
+        .then((r) => (r.ok ? r.blob() : null)).catch(() => null);
+      // best: the whole line as ONE clip (natural intonation across sentences); a miss queues it for next time
+      get(t, whole, true).then((blob) => {
+        if (tok.cut) return;
+        if (blob) return S._play([blob], [whole], t, kind, tok);
+        if (sents.length < 2) return S._tts(t, tok, kind);
+        const styles = sents.map((s) => styleOf(s, kind));       // second best: every sentence already cached
+        Promise.all(sents.map((s, i) => get(s, styles[i], false))).then((blobs) => {
           if (tok.cut) return;
-          if (blobs.some((b) => !b)) return S._tts(t, tok, kind);
-          let i = 0;
-          const next = () => {
-            if (tok.cut) return;
-            if (i >= blobs.length) return tok.finish();
-            const a = (tok.audio = new Audio(URL.createObjectURL(blobs[i])));
-            a.preservesPitch = true;
-            a.playbackRate = PACE[styles[i]] || 1;
-            i++;
-            a.onended = () => setTimeout(next, styles[i - 1] === "alert" ? 80 : 160);   // a breath between sentences
-            a.onerror = () => S._tts(sents.slice(i - 1).join(" "), tok, kind);
-            a.play().catch(() => S._tts(sents.slice(i - 1).join(" "), tok, kind));   // no gesture yet: browser voice
-          };
-          next();
+          if (blobs.some((b) => !b)) return S._tts(t, tok, kind);  // never two voices in one line
+          S._play(blobs, styles, t, kind, tok);
         });
+      });
+    },
+    _play(blobs, styles, t, kind, tok) {
+      const sents = blobs.length === 1 ? [t] : t.split(/(?<=[.!?…])\s+/).filter(Boolean);
+      let i = 0;
+      const next = () => {
+        if (tok.cut) return;
+        if (i >= blobs.length) return tok.finish();
+        const a = (tok.audio = new Audio(URL.createObjectURL(blobs[i])));
+        a.preservesPitch = true;
+        a.playbackRate = PACE[styles[i]] || 1;
+        i++;
+        a.onended = () => setTimeout(next, styles[i - 1] === "alert" ? 80 : 160);   // a breath between sentences
+        a.onerror = () => S._tts(sents.slice(i - 1).join(" "), tok, kind);
+        a.play().catch(() => S._tts(sents.slice(i - 1).join(" "), tok, kind));   // no gesture yet: browser voice
+      };
+      next();
     },
     _tts(t, tok, kind = "any") {                       // fallback: the browser's own voice
       if (tok.cut) return;

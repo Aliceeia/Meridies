@@ -581,7 +581,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "max-age=86400")
                 self.end_headers()
                 return self.wfile.write(body)
-            queued = voice.queue(text, style, v) if VOICE_AUTOGEN else False
+            queued = voice.queue(text, style, v) if VOICE_AUTOGEN and q.get("queue") != "0" else False
             return self.send(404, {"error": "no clip yet", "queued": queued})
         if parts == ["api", "settings"]:
             from connect.backend import voice

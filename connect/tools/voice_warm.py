@@ -85,15 +85,36 @@ def lines_for_samples() -> list[tuple[str, str]]:
     return out
 
 
+LIMITS = {"arrival": (4, 20), "warning": (1, 2), "short": (2, 10), "detail": (5, 30), "more": (6, 30), "help": (8, 30), "any": (6, 30)}
+
+
+def shape(text: str, kind: str) -> str:                             # = shape in speech.js (keeps whole sentences)
+    n, secs = LIMITS.get(kind, LIMITS["any"])
+    out = []
+    for s in sentences(re.sub(r"\s{2,}", " ", text)):
+        if len(out) >= n or len(" ".join(out + [s]).split()) / 2.5 > secs:
+            break
+        out.append(s[:1].upper() + s[1:])
+    return " ".join(out)
+
+
+def line_style(text: str, kind: str) -> str:                        # = lineStyle in speech.js
+    st = [style_of(s, kind) for s in sentences(text)]
+    if all(x == st[0] for x in st):
+        return st[0]
+    return "mixed" if "alert" in st else st[0]
+
+
 def all_lines() -> list[tuple[str, str]]:
+    """Whole lines, one clip each (natural intonation across sentences), shaped exactly as the page shapes them."""
     out = [(t, k) for k, ts in FIXED.items() for t in ts] + [(w, "warning") for w in WARNINGS] + lines_for_samples()
     clips, seen = [], set()
     for text, kind in out:
-        for s in sentences(text):
-            k = (s, style_of(s, kind))
-            if k not in seen:
-                seen.add(k)
-                clips.append(k)
+        t = shape(text, kind)
+        k = (t, line_style(t, kind))
+        if t and k not in seen:
+            seen.add(k)
+            clips.append(k)
     return clips
 
 
@@ -144,21 +165,25 @@ def main():
     print(f"{len(clips)} clips needed for {a.voice}; {len(missing)} missing")
     if a.count:
         return
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     made = failed = 0
     t0 = time.monotonic()
-    for i, (text, style) in enumerate(missing, 1):
-        try:
-            voice.ensure(text, style, a.voice)
-            made += 1
-        except Exception as e:  # noqa: BLE001
-            failed += 1
-            print(f"  [{i}/{len(missing)}] FAILED {style:5} {text[:50]!r}: {voice.last_error or e!r}"[:160], flush=True)
-            if "429" in str(voice.last_error):
-                print("  quota reached; run again later — clips made so far are kept", flush=True)
-                break
-        if i % 10 == 0:
-            print(f"  [{i}/{len(missing)}] {made} made, {failed} failed, {time.monotonic() - t0:.0f}s", flush=True)
-    print(f"done: {made} made, {failed} failed")
+
+    def one(item):
+        text, style = item
+        voice.ensure(text, style, a.voice)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futs = {pool.submit(one, it): it for it in missing}
+        for i, f in enumerate(as_completed(futs), 1):
+            try:
+                f.result(); made += 1
+            except Exception as e:  # noqa: BLE001
+                failed += 1
+                text, style = futs[f]
+                print(f"  FAILED {style:5} {text[:50]!r}: {voice.last_error or e!r}"[:160], flush=True)
+            if i % 20 == 0:
+                print(f"  [{i}/{len(missing)}] {made} made, {failed} failed, {time.monotonic() - t0:.0f}s", flush=True)
+    print(f"done: {made} made, {failed} failed in {time.monotonic() - t0:.0f}s")
     if a.browse:
         browse()
         print("listen-mode lines queued on the server; it makes them in the background")

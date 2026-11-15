@@ -31,12 +31,15 @@ from . import gemini
 VOICES = ["Sulafat", "Aoede", "Zephyr", "Puck"]      # warm, light, bright, lively
 DEFAULT_VOICE = "Sulafat"
 # free tier: 10 requests per day PER MODEL, so every TTS model the key has is in the chain
-MODELS = ("gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts")
+# 2.5-pro follows the delivery notes best (A/B: exact transcript first try; 3.8-flash read its notes aloud twice)
+MODELS = ("gemini-2.5-pro-preview-tts", "gemini-2.5-flash-preview-tts", "gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview")
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache" / "voice"
 RATE = 24000
 
-PERSONA = ("Speak the way a friend who knows this place would: relaxed, natural, with real pauses and emphasis. "
-           "No announcer voice, no sing-song. Never sound like you are reading a list. "
+PERSONA = ("A real person talking to a friend who can't see, standing right next to them in a place they both know. "
+           "Conversational and unperformed: relaxed breath, natural pauses where a person would take them, gentle "
+           "emphasis on the word that matters, pace that varies a little. Not an announcer, not a narrator, no "
+           "sing-song, never like reading a list. Close to the microphone, quiet room. "
            "Say exactly the words in the transcript: add nothing before or after, no 'okay', no 'so'.")
 # TTS models speak whatever is in the prompt, so the persona goes in systemInstruction and each line gets only a
 # short directive the model recognises as delivery, not script ("Say calmly: ...").
@@ -44,11 +47,12 @@ STYLE = {
     "calm": "soft, warm and unhurried, like describing a room you love to a friend",
     "alert": "brisk and firm, a quick heads-up with weight on the first words; clear, never alarmed",
     "plain": "simple and brief, matter-of-fact",
+    "mixed": "the first sentence is a quick, firm heads-up; then relax into a calm, warm, easy tone for the rest",
 }
 last_error: str | None = None
 
 
-PROMPT_VERSION = 7     # bump when PERSONA/STYLE change: old clips are never reused
+PROMPT_VERSION = 8    # bump when PERSONA/STYLE change: old clips are never reused
 
 
 def key(text: str, style: str, voice: str) -> str:
@@ -142,7 +146,7 @@ def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE) -> Path:
 # ---------- make missing clips in the background, one at a time (quota-friendly), never on the request path ----------
 import threading  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
-_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="voice")
+_worker = ThreadPoolExecutor(max_workers=3, thread_name_prefix="voice")
 _pending: set[str] = set()
 _lock = threading.Lock()
 failed: dict[str, float] = {}          # key -> when it last failed (don't hammer a quota)
