@@ -161,7 +161,7 @@ def main():
     ap.add_argument("--priority", action="store_true", help="only the most-heard lines (fits the free daily quota)")
     a = ap.parse_args()
     clips = [(s, st) for t, st in PRIORITY for s in sentences(t)] if a.priority else all_lines()
-    missing = [(t, s) for t, s in clips if not voice.cached(t, s, a.voice)]
+    missing = [(t, s) for t, s in clips if not voice.path_for(t, s, a.voice).exists()]   # Gemini clips (fallback ones get upgraded)
     print(f"{len(clips)} clips needed for {a.voice}; {len(missing)} missing")
     if a.count:
         return
@@ -171,7 +171,7 @@ def main():
 
     def one(item):
         text, style = item
-        voice.ensure(text, style, a.voice)
+        voice.ensure(text, style, a.voice, gemini_only=True)
     with ThreadPoolExecutor(max_workers=4) as pool:
         futs = {pool.submit(one, it): it for it in missing}
         for i, f in enumerate(as_completed(futs), 1):

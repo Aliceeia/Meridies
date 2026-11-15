@@ -573,9 +573,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self.err(404, "no clip")
             v = settings().get("voice", voice.DEFAULT_VOICE)
             p = voice.cached(text, style, v)
+            if not p and q.get("wait") == "1" and VOICE_AUTOGEN:
+                # a line the person asked for (where am I, tell me more): stream the neural voice as it is made, so
+                # it starts in about a second; Gemini's version is made in the background for next time
+                gen = voice.stream_edge(text, style, v)
+                try:
+                    first = next(gen)
+                except Exception as e:  # noqa: BLE001
+                    print(f"  voice: couldn't make a clip now: {e!r}"[:160], flush=True)
+                    return self.err(503, "no voice right now")
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                try:
+                    self.wfile.write(first); self.wfile.flush()
+                    for c in gen:
+                        self.wfile.write(c); self.wfile.flush()
+                except (ConnectionError, OSError):
+                    pass                                     # the person cut it off: that's fine
+                if voice.gemini_available():
+                    voice.queue(text, style, v)
+                return
             if p:
                 self.send_response(200)
-                self.send_header("Content-Type", "audio/wav")
+                self.send_header("Content-Type", "audio/mpeg" if p.suffix == ".mp3" else "audio/wav")
                 body = p.read_bytes()
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "max-age=86400")

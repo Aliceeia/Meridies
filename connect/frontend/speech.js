@@ -108,20 +108,42 @@
     _clips(t, kind, tok) {
       const sents = t.split(/(?<=[.!?…])\s+/).filter(Boolean);
       const whole = lineStyle(sents, kind);
-      const get = (text, style, queue) => fetch(`/api/voice?text=${encodeURIComponent(text)}&style=${style}${queue ? "" : "&queue=0"}`)
-        .then((r) => (r.ok ? r.blob() : null)).catch(() => null);
+      // asked-for lines (where am I, tell me more, describe, help) wait for their clip to be made (a few seconds);
+      // automatic ones (arrivals, warnings) never wait: a miss is queued and the browser voice speaks this once
+      const asked = ["detail", "more", "help", "any"].includes(kind);
+      const get = (text, style, queue, wait) => {
+        const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+        if (ctl) setTimeout(() => ctl.abort(), wait ? 12000 : 3000);
+        return fetch(`/api/voice?text=${encodeURIComponent(text)}&style=${style}${queue ? "" : "&queue=0"}${wait ? "&wait=1" : ""}`,
+                     ctl ? { signal: ctl.signal } : {})
+          .then((r) => (r.ok ? r.blob() : null)).catch(() => null);
+      };
+      if (asked) return S._stream(`/api/voice?text=${encodeURIComponent(t)}&style=${whole}&wait=1`, t, kind, tok, whole);
       // best: the whole line as ONE clip (natural intonation across sentences); a miss queues it for next time
-      get(t, whole, true).then((blob) => {
+      get(t, whole, true, false).then((blob) => {
         if (tok.cut) return;
         if (blob) return S._play([blob], [whole], t, kind, tok);
         if (sents.length < 2) return S._tts(t, tok, kind);
         const styles = sents.map((s) => styleOf(s, kind));       // second best: every sentence already cached
-        Promise.all(sents.map((s, i) => get(s, styles[i], false))).then((blobs) => {
+        Promise.all(sents.map((s, i) => get(s, styles[i], false, false))).then((blobs) => {
           if (tok.cut) return;
           if (blobs.some((b) => !b)) return S._tts(t, tok, kind);  // never two voices in one line
           S._play(blobs, styles, t, kind, tok);
         });
       });
+    },
+    // an asked-for line: the audio element plays the server's stream as it arrives (cached clip or made now)
+    _stream(url, t, kind, tok, style) {
+      const a = (tok.audio = new Audio(url));
+      a.preservesPitch = true;
+      a.playbackRate = PACE[style] || 1;
+      let started = false;
+      const fallback = () => { if (!started && !tok.cut) S._tts(t, tok, kind); };
+      a.onplaying = () => { started = true; };
+      a.onended = () => tok.finish();
+      a.onerror = fallback;
+      setTimeout(() => { if (!started && !tok.cut) { a.pause(); fallback(); } }, 12000);
+      a.play().catch(fallback);
     },
     _play(blobs, styles, t, kind, tok) {
       const sents = blobs.length === 1 ? [t] : t.split(/(?<=[.!?…])\s+/).filter(Boolean);

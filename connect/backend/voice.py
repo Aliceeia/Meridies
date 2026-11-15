@@ -127,20 +127,115 @@ def plausible(text: str, wav_bytes: bytes) -> bool:
     return seconds_of(wav_bytes) <= max(3.5, expected * 1.7 + 1.2)
 
 
+# ---------- second human voice when Gemini TTS is out of quota: Microsoft neural (edge-tts), no daily cap ----------
+EDGE_VOICE = "en-US-EmmaMultilingualNeural"
+EDGE_PACE = {"alert": "+8%", "calm": "-3%", "mixed": "+2%", "plain": "+0%"}
+gemini_blocked_until = 0.0            # set when every TTS model answers 429 (daily cap); then go straight to edge
+
+
+def edge_path(text: str, style: str, voice: str) -> Path:
+    return CACHE / f"edge-{EDGE_VOICE}" / f"{key(text, style, voice)}.mp3"
+
+
+def synth_edge(text: str, style: str) -> bytes:
+    import asyncio
+    import edge_tts
+
+    async def go():
+        out = b""
+        async for c in edge_tts.Communicate(text, EDGE_VOICE, rate=EDGE_PACE.get(style, "+0%")).stream():
+            if c["type"] == "audio":
+                out += c["data"]
+        return out
+    data = asyncio.run(go())
+    if not data:
+        raise ValueError("edge-tts returned no audio")
+    return data
+
+
+def stream_edge(text: str, style: str, voice: str):
+    """Yield the neural voice's MP3 chunks as they arrive (first sound in well under the full clip time) and save
+    the whole clip to the cache at the end."""
+    import asyncio
+    import queue as _q
+    import edge_tts
+    q: _q.Queue = _q.Queue()
+
+    def run():
+        async def go():
+            async for c in edge_tts.Communicate(text, EDGE_VOICE, rate=EDGE_PACE.get(style, "+0%")).stream():
+                if c["type"] == "audio":
+                    q.put(c["data"])
+        try:
+            asyncio.run(go())
+        except Exception as e:  # noqa: BLE001
+            q.put(e)
+        q.put(None)
+    threading.Thread(target=run, daemon=True).start()
+    got = b""
+    while True:
+        c = q.get(timeout=20)
+        if c is None:
+            break
+        if isinstance(c, Exception):
+            raise c
+        got += c
+        yield c
+    if got:
+        _write(edge_path(text, style, voice), got)
+
+
+def gemini_available() -> bool:
+    return time.time() >= gemini_blocked_until
+
+
 def cached(text: str, style: str, voice: str) -> Path | None:
-    p = path_for(text, style, voice)
-    return p if p.exists() else None
+    """The Gemini clip if there is one, else the neural fallback clip, else None."""
+    for p in (path_for(text, style, voice), edge_path(text, style, voice)):
+        if p.exists():
+            return p
+    return None
 
 
-def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE) -> Path:
-    """The clip on disk, generating it if missing."""
-    p = path_for(text, style, voice)
-    if not p.exists():
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_bytes(synth(text, style, voice))
-        tmp.replace(p)
+def _write(p: Path, data: bytes) -> Path:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(p)
     return p
+
+
+def now(text: str, style: str, voice: str) -> Path:
+    """A clip for a line someone is waiting on: Gemini's if it exists; else the neural voice right away (~1 s) while
+    Gemini's version is made in the background to replace it next time."""
+    p = path_for(text, style, voice)
+    if p.exists():
+        return p
+    e = edge_path(text, style, voice)
+    if not e.exists():
+        _write(e, synth_edge(text, style))
+    if gemini_available():
+        queue(text, style, voice)
+    return e
+
+
+def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE, gemini_only: bool = False) -> Path:
+    """The clip on disk, generating it if missing: Gemini first; when Gemini is out of quota (or fails), the
+    neural fallback voice, so a line is never left to the robotic browser voice."""
+    global gemini_blocked_until
+    p = path_for(text, style, voice)
+    if p.exists():
+        return p
+    if gemini_available() or gemini_only:
+        try:
+            return _write(p, synth(text, style, voice))
+        except Exception:  # noqa: BLE001
+            if "429" in str(last_error):
+                gemini_blocked_until = time.time() + 3600     # daily cap: stop asking for an hour
+            if gemini_only:
+                raise
+    e = edge_path(text, style, voice)
+    return e if e.exists() else _write(e, synth_edge(text, style))
 
 
 # ---------- make missing clips in the background, one at a time (quota-friendly), never on the request path ----------
@@ -155,7 +250,8 @@ failed: dict[str, float] = {}          # key -> when it last failed (don't hamme
 def queue(text: str, style: str, voice: str) -> bool:
     k = f"{voice}/{key(text, style, voice)}"
     with _lock:
-        if k in _pending or path_for(text, style, voice).exists() or time.time() - failed.get(k, 0) < 600:
+        if (k in _pending or path_for(text, style, voice).exists() or time.time() - failed.get(k, 0) < 600
+                or (edge_path(text, style, voice).exists() and not gemini_available())):
             return False
         _pending.add(k)
 
