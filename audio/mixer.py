@@ -7,6 +7,9 @@ Warning list format (from C, port 5556, ~20 Hz):
     [{"id": "S2", "az": 15, "dist": 0.64, "level": "warn"},
      {"id": "S5", "az": -80, "dist": 0.42, "level": "urgent"}]
 At most 3 entries, nearest first, empty list = silence.
+Every entry gets a hum; beeps start at BEEP_DIST_M of horizontal distance
+(dist * cos(el)) and the urgent cue at URGENT_DIST_M of "dist" ("level" is
+not used).
 """
 import json
 from pathlib import Path
@@ -24,7 +27,17 @@ NUM_SLOTS = 3
 # this should feel like a calm, readable pulse, not an alarm. Floor nudged
 # up from 0.35s to 0.45s to comfortably fit the longer tone (tone_render.py
 # beep is now 0.42s) without heavy tail-overlap at the fastest repeat rate.
-DIST_NEAR, DIST_FAR = 0.5, 1.5
+#
+# Trigger distances are decided HERE, not from the feed's "level":
+#   beeps start when the HORIZONTAL distance (x, y plane: dist * cos(el))
+#   is within BEEP_DIST_M; the urgent cue joins when the straight-line
+#   distance is within URGENT_DIST_M.
+# Anything farther that the feed still sends is heard through the hum only.
+BEEP_DIST_M = 0.65          # horizontal
+URGENT_DIST_M = 0.25        # straight-line
+# The beep's tempo / loudness / brightness / reverb ramp over this range of
+# straight-line distance (was 0.5 .. 1.5 m when beeps started at 1.5 m).
+DIST_NEAR, DIST_FAR = URGENT_DIST_M, BEEP_DIST_M
 # Both ends slowed to 2/3 of the earlier beep rate (period x1.5, was 0.45 / 1.3 s).
 PERIOD_NEAR, PERIOD_FAR = 0.675, 1.95
 EASE_EXP = 1.6
@@ -40,6 +53,12 @@ EASE_EXP = 1.6
 # obstacles' loudness the way an untuned guess did earlier.
 LPF_CUTOFF_FAR_HZ = 300.0
 LPF_CUTOFF_NEAR_HZ = 1500.0
+
+
+def horizontal_dist(dist, el_deg):
+    """Distance in the horizontal (x, y) plane of the head frame, from the
+    straight-line distance and elevation (+ up) the feed sends."""
+    return dist * np.cos(np.radians(el_deg or 0.0))
 
 
 def dist_to_period(dist):
@@ -306,7 +325,8 @@ def _hrtf(mono, az_deg, el_deg):
 HUM_RMS_AT_REF = 0.025      # output RMS (per ear, straight ahead) at HUM_REF_DIST_M
 HUM_REF_DIST_M = 0.5
 HUM_MAX_GAIN = 2.0          # cap on the 1/d boost (reached at 0.25 m)
-HUM_CUTOFF_NEAR_HZ, HUM_CUTOFF_FAR_HZ = 700.0, 180.0   # over DIST_NEAR .. DIST_FAR
+HUM_DIST_NEAR, HUM_DIST_FAR = 0.25, 1.0   # the hum covers everything sensing_pi sends (warn <= 1 m)
+HUM_CUTOFF_NEAR_HZ, HUM_CUTOFF_FAR_HZ = 700.0, 180.0   # over HUM_DIST_NEAR .. HUM_DIST_FAR
 HUM_ATTACK_S, HUM_RELEASE_S = 0.25, 0.35
 
 
@@ -315,8 +335,8 @@ def hum_gain(dist_m):
 
 
 def hum_cutoff(dist_m, az_deg):
-    d = min(max(dist_m, DIST_NEAR), DIST_FAR)
-    t = (d - DIST_NEAR) / (DIST_FAR - DIST_NEAR)
+    d = min(max(dist_m, HUM_DIST_NEAR), HUM_DIST_FAR)
+    t = (d - HUM_DIST_NEAR) / (HUM_DIST_FAR - HUM_DIST_NEAR)
     return (HUM_CUTOFF_NEAR_HZ + t * (HUM_CUTOFF_FAR_HZ - HUM_CUTOFF_NEAR_HZ)) * cutoff_factor(az_deg)
 
 
@@ -482,6 +502,7 @@ class VoiceSlot:
         self.az = 0.0
         self.el = 0.0
         self.dist = DIST_FAR
+        self.hdist = DIST_FAR
         self.urgent = False
         self.period_samples = None
         self.next_onset_sample = 0
@@ -509,7 +530,8 @@ class VoiceSlot:
         self.az = obstacle["az"]
         self.el = obstacle.get("el") or 0.0   # sensing_pi sends el; older feeds don't
         self.dist = obstacle["dist"]
-        self.urgent = obstacle.get("level") == "urgent"
+        self.hdist = horizontal_dist(self.dist, self.el)   # beep trigger
+        self.urgent = obstacle["dist"] <= URGENT_DIST_M   # by distance; the feed's "level" is ignored
         self.period_samples = max(1, int(dist_to_period(obstacle["dist"]) * samplerate))
         cutoff = min(dist_to_cutoff(obstacle["dist"]) * cutoff_factor(self.az), 0.45 * samplerate)
         self.lpf_alpha = float(np.exp(-2 * np.pi * cutoff / samplerate))
@@ -602,7 +624,12 @@ class Mixer:
         block_end = self.sample_counter + n_frames
 
         for slot in self.slots:
-            if slot.active and slot.period_samples:
+            if slot.active and slot.period_samples and slot.hdist > BEEP_DIST_M:
+                # hum-only range: hold the schedule at "now" so the first beep
+                # fires as soon as it comes within BEEP_DIST_M horizontally
+                # (no backlog burst)
+                slot.next_onset_sample = max(slot.next_onset_sample, block_end)
+            elif slot.active and slot.period_samples:
                 while slot.next_onset_sample < block_end:
                     onset = slot.next_onset_sample
                     offset_in_block = max(0, onset - self.sample_counter)

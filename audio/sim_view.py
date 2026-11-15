@@ -12,7 +12,11 @@ Mouse / keys (click the plot first so it has keyboard focus):
     space               mute / unmute
 
 The warning list sent to the mixer mirrors sensing_pi: nearest first, max 3,
-"urgent" under 0.5 m, silent beyond the warn range (1.5 m) unless that box is unticked.
+nothing beyond its warn range (1.0 m) unless that box is unticked. The plot is the
+horizontal plane; the elevation slider lifts/lowers every obstacle, so the
+straight-line distance sent is horiz / cos(el). Colours show what the mixer does:
+blue = hum only, orange = beeps (horizontal <= 0.65 m),
+red = beeps + urgent cue (straight-line <= 0.25 m).
 """
 import argparse
 import math
@@ -29,9 +33,10 @@ from mixer import Mixer, SoundBank
 BLOCKSIZE = 256
 R = 2.5                 # plot radius, m
 PICK_M = 0.2            # how close a click must be to grab a dot
-WARN_RANGE_M = 1.5
-URGENT_M = 0.5
-COLORS = {"urgent": "#d62728", "warn": "#ff7f0e", "silent": "#9e9e9e"}
+WARN_RANGE_M = 1.0              # sensing_pi sends objects out to its warn_dist_m
+BEEP_M = M.BEEP_DIST_M          # mixer: beeps start here ...
+URGENT_M = M.URGENT_DIST_M      # ... and the urgent cue joins here
+COLORS = {"urgent": "#d62728", "beep": "#ff7f0e", "hum": "#1f77b4", "silent": "#9e9e9e"}
 
 
 class Sim:
@@ -41,7 +46,7 @@ class Sim:
         self.lock = threading.Lock()
         self.warnings = []
         self.muted = False
-        self.obs = [{"id": "A", "x": 0.0, "y": 1.0}]   # x = right, y = forward (m)
+        self.obs = [{"id": "A", "x": 0.0, "y": 0.4}]   # x = right, y = forward (m)
         self.next_id = 1
         self.sel = 0
         self.drag = None
@@ -68,21 +73,29 @@ class Sim:
         az = math.degrees(math.atan2(o["x"], o["y"]))   # 0 = ahead, + right
         return az, dist
 
-    def level(self, dist):
-        if dist < URGENT_M:
+    def straight(self, horiz):
+        """The plot is the horizontal plane; with the elevation slider the
+        object is above/below it, so the sensor's straight-line distance is longer."""
+        return horiz / math.cos(math.radians(self.el))
+
+    def level(self, horiz):
+        if self.straight(horiz) <= URGENT_M:
             return "urgent"
-        if self.gate and dist > WARN_RANGE_M:
+        if horiz <= BEEP_M:
+            return "beep"
+        if self.gate and self.straight(horiz) > WARN_RANGE_M:
             return "silent"
-        return "warn"
+        return "hum"
 
     def _publish(self):
         ws = []
         for o in self.obs:
-            az, dist = self.polar(o)
-            lv = self.level(dist)
+            az, horiz = self.polar(o)
+            lv = self.level(horiz)
             if lv != "silent":
                 ws.append({"id": o["id"], "az": round(az, 1), "el": self.el,
-                           "dist": round(max(dist, 0.05), 3), "level": lv})
+                           "dist": round(max(self.straight(horiz), 0.05), 3),
+                           "level": "urgent" if lv == "urgent" else "warn"})
         ws.sort(key=lambda w: w["dist"])
         with self.lock:
             self.warnings = ws[:M.NUM_SLOTS]
@@ -99,7 +112,7 @@ class Sim:
         ax.set_aspect("equal")
         ax.set_xlabel("right (m)")
         ax.set_ylabel("forward (m)")
-        for r, ls in ((URGENT_M, "-"), (1.0, ":"), (WARN_RANGE_M, "--"), (2.0, ":")):
+        for r, ls in ((URGENT_M, "-"), (BEEP_M, "-"), (WARN_RANGE_M, "--"), (1.5, ":"), (2.0, ":")):
             ax.add_patch(plt.Circle((0, 0), r, fill=False, ls=ls, lw=0.8, color="grey"))
             ax.text(r * 0.72, r * 0.72, f"{r} m", fontsize=7, color="grey")
         for deg in range(0, 360, 45):
@@ -120,7 +133,7 @@ class Sim:
         self.checks = CheckButtons(cax, names, [M.CUES[n] for n in names])
         self.checks.on_clicked(self._toggle_cue)
         gax = self.fig.add_axes([0.76, 0.5, 0.22, 0.08])
-        self.gate_btn = CheckButtons(gax, ["silent > 1.5 m"], [self.gate])
+        self.gate_btn = CheckButtons(gax, [f"silent > {WARN_RANGE_M} m"], [self.gate])
         self.gate_btn.on_clicked(self._toggle_gate)
         sax = self.fig.add_axes([0.80, 0.14, 0.03, 0.3])
         self.slider = Slider(sax, "elev °", -40, 60, valinit=0, orientation="vertical")
@@ -146,6 +159,7 @@ class Sim:
         for i, o in enumerate(self.obs):
             az, dist = self.polar(o)
             lv = self.level(dist)
+            raw = self.straight(dist)
             col = COLORS[lv]
             heard = o["id"] in sent
             self.rays.append(self.ax.plot([0, o["x"]], [0, o["y"]], color=col,
@@ -154,7 +168,9 @@ class Sim:
                                           mec="black" if i == self.sel else col, mew=2, zorder=4)[0])
             voice = f"voice {sent[o['id']] + 1}" if heard else "not sent"
             self.labels.append(self.ax.annotate(
-                f"{o['id']}  az {az:+.0f}°  {dist:.2f} m\n{lv} · {voice}", (o["x"], o["y"]),
+                f"{o['id']}  az {az:+.0f}°  horiz {dist:.2f} m"
+                + (f" (line {raw:.2f})" if abs(self.el) >= 1 else "")
+                + f"\n{lv} · {voice}", (o["x"], o["y"]),
                 xytext=(10, 8), textcoords="offset points", fontsize=8, zorder=5))
         cues = " ".join(n for n, v in M.CUES.items() if v) or "none (plain HRTF)"
         self.status.set_text(f"{len(sent)} sent to engine · cues: {cues} · el {self.el:+.0f}°"

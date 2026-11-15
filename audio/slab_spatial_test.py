@@ -7,17 +7,19 @@ slab KEMAR HRTF direction), fed a fake one-obstacle warning list.
     python slab_spatial_test.py [--device NAME] [--secs 2.5]
 
 At the prompt:
-    x y z              metres, head frame: x forward, y right, z up   e.g.  1 -1 0  (front-left)
-    a AZ EL [D]        degrees: az 0 = ahead, + right; el + up; D metres (default 1)
+    x y z              metres, head frame: x forward, y right, z up   e.g.  0.3 -0.2 0  (front-left)
+    a AZ EL [D]        degrees: az 0 = ahead, + right; el + up; D metres (default 0.4)
     s [D] [SECS] [EL]  round sweep: one full circle clockwise from ahead
-                       (ahead -> right -> behind -> left -> ahead), default 1 m, 8 s, el 0
-    fb [AZ] [D]        front/back pair: AZ then its mirror behind (180-AZ), twice; default 0 deg, 1 m
+                       (ahead -> right -> behind -> left -> ahead), default 0.4 m, 8 s, el 0
+    fb [AZ] [D]        front/back pair: AZ then its mirror behind (180-AZ), twice; default 0 deg, 0.4 m
     cues               show the extra cues (room cutoff ild) and the hum layer
     cues on | off      all of them on / off (off = plain HRTF, for A/B)
     cues -NAME +NAME   switch single cues, e.g.  cues -hum +ild
     q                  quit
 
-Under 0.5 m the obstacle is sent as "urgent", so the urgent cue plays too.
+Same thresholds as the engine: beeps when the horizontal distance
+(dist * cos(el)) is within 0.65 m, plus the urgent cue within 0.25 m
+straight-line; otherwise hum only.
 """
 import argparse
 import math
@@ -39,7 +41,7 @@ def to_az_el_dist(x, y, z):
 
 def warning(az, el, dist, oid="T"):
     az = (az + 180) % 360 - 180
-    return [{"id": oid, "az": az, "el": el, "dist": dist, "level": "urgent" if dist < 0.5 else "warn"}]
+    return [{"id": oid, "az": az, "el": el, "dist": dist, "level": "urgent" if dist <= M.URGENT_DIST_M else "warn"}]
 
 
 def cues_cmd(t):
@@ -103,7 +105,7 @@ def main():
                 continue
             if cmd == "fb":
                 az = float(t[1]) if len(t) > 1 else 0.0
-                dist = float(t[2]) if len(t) > 2 else 1.0
+                dist = float(t[2]) if len(t) > 2 else 0.4
                 back = 180.0 - az
                 seg = 2.0
                 order = [az, back, az, back]
@@ -113,7 +115,7 @@ def main():
                                    lambda tt: warning(order[min(int(tt // seg), 3)], 0.0, dist,
                                                       oid=f"T{min(int(tt // seg), 3)}"))
             elif cmd == "s":
-                dist = float(t[1]) if len(t) > 1 else 1.0
+                dist = float(t[1]) if len(t) > 1 else 0.4
                 secs = float(t[2]) if len(t) > 2 else 8.0
                 el = float(t[3]) if len(t) > 3 else 0.0
                 print(f"  sweep: full circle at {dist:.2f} m, el {el:+.0f}, {secs:.0f} s "
@@ -122,13 +124,14 @@ def main():
             else:
                 if cmd == "a":
                     az, el = float(t[1]), float(t[2])
-                    dist = float(t[3]) if len(t) > 3 else 1.0
+                    dist = float(t[3]) if len(t) > 3 else 0.4
                 elif len(t) == 3:
                     az, el, dist = to_az_el_dist(*map(float, t))
                 else:
                     raise ValueError
-                print(f"  az {az:+.0f} deg ({side(az)}), el {el:+.0f} deg, {dist:.2f} m"
-                      + ("  [urgent]" if dist < 0.5 else ""))
+                h = M.horizontal_dist(dist, el)
+                print(f"  az {az:+.0f} deg ({side(az)}), el {el:+.0f} deg, {dist:.2f} m (horiz {h:.2f} m)"
+                      + ("  [urgent]" if dist <= M.URGENT_DIST_M else "  [beeps]" if h <= M.BEEP_DIST_M else "  [hum only]"))
                 audio, sr = render(bank, a.secs, lambda tt: warning(az, el, dist))
         except (ValueError, IndexError):
             print("  ? type 'x y z', 'a AZ EL [DIST]', 's [DIST] [SECS] [EL]', 'fb [AZ] [DIST]', 'cues ...' or 'q'")

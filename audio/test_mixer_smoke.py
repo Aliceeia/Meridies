@@ -18,19 +18,19 @@ BLOCK = 256
 def scripted_warnings(t):
     """t in seconds -> warning list, mimicking mock_warnings.py's scenarios."""
     if t < 1.5:
-        # single obstacle sweeping left -> right, far -> near
+        # single obstacle sweeping left -> right, far (hum only) -> near (beeping)
         az = -80 + (t / 1.5) * 160
-        dist = 1.4 - (t / 1.5) * 0.9
+        dist = 0.9 - (t / 1.5) * 0.6
         return [{"id": "S_sweep", "az": az, "dist": dist, "level": "warn"}]
     elif t < 3.0:
         # that obstacle is now urgent-close
-        return [{"id": "S_sweep", "az": 70, "dist": 0.35, "level": "urgent"}]
+        return [{"id": "S_sweep", "az": 70, "dist": 0.2, "level": "urgent"}]
     elif t < 5.0:
-        # three simultaneous obstacles, one urgent
+        # three simultaneous obstacles: hum only, beeping, urgent
         return [
-            {"id": "A", "az": -60, "dist": 0.9, "level": "warn"},
-            {"id": "B", "az": 10, "dist": 1.2, "level": "warn"},
-            {"id": "C", "az": 75, "dist": 0.4, "level": "urgent"},
+            {"id": "A", "az": -60, "dist": 0.8, "level": "warn"},
+            {"id": "B", "az": 10, "dist": 0.4, "level": "warn"},
+            {"id": "C", "az": 75, "dist": 0.2, "level": "urgent"},
         ]
     else:
         return []  # silence tail — should produce near-zero output
@@ -69,7 +69,36 @@ def main():
 
     sf.write("preview.wav", audio, sr)
     hum_comes_back(bank)
+    trigger_distances(bank)
     print("OK — wrote preview.wav, all smoke assertions passed")
+
+
+def trigger_distances(bank):
+    """Beeps only from BEEP_DIST_M, urgent cue only from URGENT_DIST_M, decided by
+    distance (the feed's "level" is ignored). Hum off so only beeps are measured."""
+    import mixer as M
+    hum_was, M.CUES["hum"] = M.CUES["hum"], False
+    try:
+        def run(dist, level="warn", el=0.0):
+            mixer = Mixer(bank)
+            mixer.update_warnings([{"id": "T", "az": 0, "el": el, "dist": dist, "level": level}])
+            audio = np.concatenate([mixer.render_block(BLOCK) for _ in range(int(2.0 * mixer.sr / BLOCK))])
+            return float(np.sqrt(np.mean(audio ** 2))), mixer.slots[0].urgent
+
+        far, far_urgent = run(M.BEEP_DIST_M + 0.05, level="urgent")   # Pi says urgent; still too far
+        near, near_urgent = run(M.BEEP_DIST_M - 0.05)
+        close, close_urgent = run(M.URGENT_DIST_M - 0.05)
+        assert far < 1e-4 and not far_urgent, f"no beeps beyond {M.BEEP_DIST_M} m (rms {far})"
+        assert near > 0.01 and not near_urgent, f"beeps (not urgent) inside {M.BEEP_DIST_M} m (rms {near})"
+        assert close > 0.01 and close_urgent, f"urgent cue inside {M.URGENT_DIST_M} m"
+        # beep trigger is HORIZONTAL distance: 0.85 m at 45 deg below = 0.60 m horizontal -> beeps
+        low, _ = run(0.85, el=-45.0)
+        # (quieter than straight ahead: loudness follows straight-line distance)
+        assert low > 1e-3, f"0.85 m at el -45 is 0.60 m horizontal, should beep (rms {low})"
+        print(f"trigger distances: silent > {M.BEEP_DIST_M} m horiz, beeps <= {M.BEEP_DIST_M} m horiz "
+              f"(also for low objects), urgent <= {M.URGENT_DIST_M} m: OK")
+    finally:
+        M.CUES["hum"] = hum_was
 
 
 def hum_comes_back(bank):
