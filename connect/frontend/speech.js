@@ -110,7 +110,8 @@
       const whole = lineStyle(sents, kind);
       // asked-for lines (where am I, tell me more, describe, help) wait for their clip to be made (a few seconds);
       // automatic ones (arrivals, warnings) never wait: a miss is queued and the browser voice speaks this once
-      const asked = ["detail", "more", "help", "any"].includes(kind);
+      // everything except one-clause warnings (all pre-made) streams: first sound in ~1 s even for a brand-new line
+      const asked = kind !== "warning";
       const get = (text, style, queue, wait) => {
         const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
         if (ctl) setTimeout(() => ctl.abort(), wait ? 12000 : 3000);
@@ -180,7 +181,8 @@
       S.current = null;
       S.lastDone = 0;
     },
-    oops() {
+    oops(why) {
+      console.warn("said 'I couldn't get that':", why || new Error().stack.split("\n")[2]);   // where it came from
       if (S.tone) S.tone();
       return S.say("I couldn't get that — try again.", { kind: "short", force: true });
     },

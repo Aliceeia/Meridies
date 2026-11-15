@@ -79,9 +79,12 @@ document.addEventListener("described", (e) => { stopThinking(); earcon("ready");
 document.addEventListener("describe-failed", () => { stopThinking(); Speech.oops(); _toast("Couldn't describe this place — try again", 4000); });
 
 // Listen must always answer: if a recording can't be played, say so, plainly.
+// Only a memory that really failed to play is said aloud; any other background hiccup is logged, not spoken
+// (it used to say "I couldn't get that" for failures the person never caused).
 window.addEventListener("unhandledrejection", (e) => {
-  Speech.oops();
-  console.warn("playback failed:", e.reason);
+  const r = e.reason || {};
+  console.warn("unhandled:", r.name, r.message);
+  if (r.name === "EncodingError" || /decode/i.test(r.message || "")) Speech.oops();
 });
 $("listen").addEventListener("click", () => audio.tone(880, 0.04, 0.06), true);   // the press registered
 $("whereami").addEventListener("click", () => {
