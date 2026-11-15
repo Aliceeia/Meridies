@@ -1,5 +1,7 @@
 {
-  "_comment": "Head frame: origin = head centre (between ear canals), x forward, y right, z up, metres. az + right, el + up, degrees. x/y/z are placeholders until measured on the cap.",
+  "_comment": "Cap rig. Sensor positions and angles are in config/sensor_layout.py (CAP table): edit them there. This file keeps the rig settings and each sensor's advanced settings: roll_deg (rotation about its own axis, 180 = upside-down), zone flips, and range calibration.",
+  "layout": "CAP",
+  "layout_file": "sensor_layout.py",
   "fov_deg": 45.0,
   "range_model": "radial",
   "min_range_m": 0.12,
@@ -7,11 +9,11 @@
   "zone_flip_h": false,
   "zone_flip_v": true,
   "sensors": [
-    {"id": "S1", "az_deg": -40, "el_deg": -10, "roll_deg": 0, "x_m": 0.15, "y_m": -0.08, "z_m": 0.07, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
-    {"id": "S2", "az_deg":   0, "el_deg": -10, "roll_deg": 0, "x_m": 0.17, "y_m":  0.00, "z_m": 0.07, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
-    {"id": "S3", "az_deg":  40, "el_deg": -10, "roll_deg": 0, "x_m": 0.15, "y_m":  0.08, "z_m": 0.07, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
-    {"id": "S4", "az_deg": -85, "el_deg":  -5, "roll_deg": 0, "x_m": 0.00, "y_m": -0.09, "z_m": 0.08, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
-    {"id": "S5", "az_deg":   0, "el_deg": -40, "roll_deg": 0, "x_m": 0.14, "y_m":  0.00, "z_m": 0.06, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
-    {"id": "S6", "az_deg":  85, "el_deg":  -5, "roll_deg": 0, "x_m": 0.00, "y_m":  0.09, "z_m": 0.08, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0}
+    {"id": "S1", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S2", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S3", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S4", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S5", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0},
+    {"id": "S6", "roll_deg": 0, "flip_h": false, "flip_v": false, "range_scale": 1.0, "range_offset_mm": 0.0}
   ]
 }

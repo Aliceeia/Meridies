@@ -12,7 +12,17 @@ Angles, matching `sectors.json` and `audio/hrtf_render.py`:
 - **azimuth / horizontal angle (az)**: 0° straight ahead, **+ right**, − left
 - **elevation / vertical angle (el)**: 0° level, **+ up**, − down
 
-Each sensor's mount is `az, el, roll` (where it points) plus `x, y, z` in metres (where it sits). These live in [`config/cap_mounts.json`](../config/cap_mounts.json).
+**Where to edit sensor positions and angles: [`config/sensor_layout.py`](../config/sensor_layout.py)** (the `CAP` table). It uses its own convention, made for measuring with a ruler:
+
+| Column | Meaning |
+|---|---|
+| `x_cm` | + right of the head centre, − left |
+| `y_cm` | + in front, − behind |
+| `angle_deg` | 0 = straight ahead, **counter-clockwise** seen from above: 90 = left, 180 = behind, 270 = right |
+| `tilt_deg` | 0 = level, − = pointing down, + = pointing up |
+| `height_cm` | optional; + above ear height |
+
+The code converts these to the internal frame and angles above when it loads them. Check the result with `.venv/bin/python -m geometry.layout config/cap_mounts.json`. Advanced per-sensor settings (`roll_deg`, zone flips, range calibration) stay in [`config/cap_mounts.json`](../config/cap_mounts.json).
 
 ## Layout
 
@@ -45,7 +55,7 @@ Each VL53L5CX sees 45° × 45° in 8 × 8 zones (~5.6° per zone).
 ## Mounting notes
 - **Brim sensors:** mount them flush with the **front edge** of the brim, so the brim itself isn't in the field of view. S5 goes on the brim's underside, set back about 2 cm from the edge.
 - **Side sensors:** put them on the crown about 3 cm above the ear, so the ear and hair don't block the lower zones.
-- **Angles:** set them with foam wedges or 3D-printed wedges at the angles above, then **measure the real `x, y, z`** with a ruler from the head centre (put the cap on a person or a head form) and enter them in `cap_mounts.json`. Run the calibration (below) to correct the angles.
+- **Angles:** set them with foam wedges or 3D-printed wedges at the angles above, then **measure the real positions** with a ruler from the head centre (put the cap on a person or a head form) and enter them, with the angles and tilts, in the `CAP` table of `config/sensor_layout.py`. Run the calibration (below) to correct the angles.
 - **Cables:** run them back along the crown to the pouch at the back. Leave a strain-relief loop at each sensor.
 - **MPU6050:** put it at the back of the crown, flat and centred, with its x axis pointing forward. It will supply head pitch/roll/yaw for `geometry/orientation.py` later.
 
@@ -55,4 +65,4 @@ Everything below lives in `geometry/calibrate.py`.
 1. **Zone orientation, once per mounting style:** hold a hand about 30 cm in front of a sensor and move it left → right, then up → down. Watch the tile in `tof6_view.py`. If the hand moves the wrong way, set `flip_h` / `flip_v` for that sensor. If left/right and up/down are swapped, set `roll_deg` to 90 or −90.
 2. **Range, per sensor, on the bench:** point the sensor square at a wall at 0.5, 1.0 and 2.0 m and record about 50 frames each. `fit_range(...)` returns the `range_scale` and `range_offset_mm` for that sensor.
 3. **Mount angles, worn:** the wearer stands with head level, facing a wall at a measured distance D from the head centre. Record about 50 frames, then run `calibrate_mount(...)` for S1, S2, S3 and S5 with the wall `normal=(1,0,0), distance=D`. Then the wearer turns so the wall is on their left: run it for S4 with `normal=(0,-1,0)`. Turn so the wall is on the right: run it for S6 with `normal=(0,1,0)`. Each call returns the corrected `az, el` and the RMS error; the error should be under ~2 cm.
-4. Save the results with `save_mounts(...)`.
+4. Each `calibrate_mount` report includes a `layout_row` line in the `sensor_layout.py` format: paste it over that sensor's row. Range results (`range_scale`, `range_offset_mm`) go into `cap_mounts.json`, either by hand or with `save_mounts(...)`, which leaves the positions in the layout file alone.

@@ -130,7 +130,11 @@ def calibrate_mount(rig: Rig, k: int, frames: list[dict], normal, distance_m: fl
 
     best = replace(best, az_deg=round(float(best.az_deg), 2), el_deg=round(float(best.el_deg), 2),
                    roll_deg=round(float(best.roll_deg), 2))
+    from .layout import fields_to_row, format_row
+    row = fields_to_row(best)
     report = {"id": best.id, "az_deg": best.az_deg, "el_deg": best.el_deg,
+              "angle_deg": row[2], "tilt_deg": row[3],
+              "layout_row": format_row(best.id, row),   # paste into config/sensor_layout.py
               "roll_deg": best.roll_deg, "rms_m": round(cost(best, use), 4),
               "start_rms_m": round(start_rms, 4), "n_zones": int(use.sum())}
     return best, report

@@ -29,7 +29,7 @@ It publishes on `tcp://*:5556`, the port `audio/engine.py` listens to, so start 
   - All six views overlap; the scan fuses them by taking the nearest reading per azimuth bin.
   - The plate only sees ±22.5°, so a side wall shows up as a short "narrow" piece at the edge of the view.
 - **`config/cap_mounts.json`:** the cap layout from `docs/cap_layout.md`, about 215° horizontally plus a downward sensor.
-- To wear the flat plate, add the plate-to-head-centre offset to every sensor's `x_m`/`z_m`.
+- **Sensor positions and angles for both rigs are edited in `config/sensor_layout.py`** (the `FLAT` and `CAP` tables: x_cm right, y_cm front, angle counter-clockwise with 90 = left, tilt − = down). To wear the flat plate, add the plate-to-head-centre offset to every row in `FLAT`. Check with `.venv/bin/python -m geometry.layout config/flat_mounts.json`.
 
 ### Zone orientation: set once with the hand test
 `zone_flip_h` / `zone_flip_v` at the top of the rig file say how the VL53L5CX's own zone order maps onto the scene for a board mounted upright. It's the same for every board, so it's set once per rig file. The defaults are `false`/`false`. Check them:

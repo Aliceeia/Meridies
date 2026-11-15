@@ -15,8 +15,27 @@ from geometry.transform import to_angles, zone_rays  # noqa: E402
 from objects import REQUIRED, ObjectPipeline  # noqa: E402
 from sim.scene import Plane, Pole, render, scene_shapes  # noqa: E402
 
-FLAT = load_mounts(ROOT / "config" / "flat_mounts.json")
-CAP = load_mounts(ROOT / "config" / "cap_mounts.json")
+from geometry.layout import with_rows  # noqa: E402
+
+# Fixed test layouts, so the tests don't change when config/sensor_layout.py is edited.
+PLANNED_CAP = {
+    "S1": (-8.0, 15.0, 40.0, -10.0, 7.0), "S2": (0.0, 17.0, 0.0, -10.0, 7.0),
+    "S3": (8.0, 15.0, 320.0, -10.0, 7.0), "S4": (-9.0, 0.0, 85.0, -5.0, 8.0),
+    "S5": (0.0, 14.0, 0.0, -40.0, 6.0), "S6": (9.0, 0.0, 275.0, -5.0, 8.0),
+}
+PLATE = {
+    "S1": (-2.5, 0.0, 0.0, 0.0, 2.0), "S2": (0.0, 0.0, 0.0, 0.0, 2.0), "S3": (2.5, 0.0, 0.0, 0.0, 2.0),
+    "S4": (-2.5, 0.0, 0.0, 0.0, -2.0), "S5": (0.0, 0.0, 0.0, 0.0, -2.0), "S6": (2.5, 0.0, 0.0, 0.0, -2.0),
+}
+FLAT = with_rows(load_mounts(ROOT / "config" / "flat_mounts.json"), PLATE)
+CAP = with_rows(load_mounts(ROOT / "config" / "cap_mounts.json"), PLANNED_CAP)
+
+
+def test_real_cap_layout_runs():
+    """The hand-edited cap layout loads and the pipeline runs on it without errors."""
+    real = load_mounts(ROOT / "config" / "cap_mounts.json")
+    for _, w in run(real, lambda t: scene_shapes("corridor", t), n=4):
+        check_schema(w)
 HZ = 10
 
 

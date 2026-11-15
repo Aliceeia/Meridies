@@ -66,17 +66,41 @@ _RIG_KEYS = ("fov_deg", "range_model", "min_range_m", "floor_z_m", "zone_flip_h"
 
 
 def load_mounts(path: str | Path) -> Rig:
-    raw = json.loads(Path(path).read_text())
+    """Read a rig json. If it has "layout": "<NAME>", each sensor's position and angles come from
+    LAYOUTS[NAME] in the layout file (default config/sensor_layout.py, next to the json);
+    the json then only holds the advanced settings (roll, flips, range calibration)."""
+    path = Path(path)
+    raw = json.loads(path.read_text())
     names = {f.name for f in fields(Mount)}
-    sensors = [Mount(**{k: v for k, v in s.items() if k in names}) for s in raw["sensors"]]
+    entries = [dict(s) for s in raw["sensors"]]
+
+    if "layout" in raw:
+        from .layout import GEOMETRY_FIELDS, load_layout
+        layout_file = path.parent / raw.get("layout_file", "sensor_layout.py")
+        geo = load_layout(layout_file, raw["layout"])
+        ids = [s["id"] for s in entries]
+        if sorted(geo) != sorted(ids):
+            raise ValueError(f"{layout_file} {raw['layout']} has sensors {sorted(geo)}, {path.name} has {ids}")
+        for s in entries:
+            dup = [k for k in GEOMETRY_FIELDS if k in s]
+            if dup:
+                raise ValueError(f"{path.name} {s['id']}: {dup} are set here AND in {layout_file.name}; "
+                                 f"keep positions/angles only in {layout_file.name}")
+            s.update(geo[s["id"]])
+
+    sensors = [Mount(**{k: v for k, v in s.items() if k in names}) for s in entries]
     extra = {k: v for k, v in raw.items() if k not in _RIG_KEYS + ("sensors",)}
     return Rig(sensors=sensors, extra=extra, **{k: raw[k] for k in _RIG_KEYS if k in raw})
 
 
 def save_mounts(rig: Rig, path: str | Path) -> None:
+    """Write a rig json. For a layout-based rig the positions/angles are NOT written (they live in
+    the layout file); print them with geometry.layout.format_row and paste them there instead."""
+    from .layout import GEOMETRY_FIELDS
     out = dict(rig.extra)
     out.update({k: getattr(rig, k) for k in _RIG_KEYS})
-    out["sensors"] = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in asdict(m).items()}
+    skip = set(GEOMETRY_FIELDS) if "layout" in rig.extra else set()
+    out["sensors"] = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in asdict(m).items() if k not in skip}
                       for m in rig.sensors]
     Path(path).write_text(json.dumps(out, indent=2) + "\n")
 
