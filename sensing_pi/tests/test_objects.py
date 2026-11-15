@@ -44,6 +44,9 @@ def check_schema(warnings):
         for k in REQUIRED:
             assert w.get(k) is not None, f"missing {k}: {w}"
         assert isinstance(w["az"], float) and isinstance(w["dist"], float)
+        # dist is straight-line, hdist horizontal: audio/mixer.py recovers hdist as dist * cos(el)
+        assert w["hdist"] <= w["dist"] + 1e-3
+        assert abs(w["dist"] * math.cos(math.radians(w["el"])) - w["hdist"]) < 0.01, w
     assert len({w["id"] for w in warnings}) == len(warnings)
 
 

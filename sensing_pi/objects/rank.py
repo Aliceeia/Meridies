@@ -39,12 +39,21 @@ def rank(objs: list[Obj], c: dict) -> list[dict]:
             tr.level = o.level
         o.score = score(o, c)
     active = sorted((o for o in objs if o.level), key=lambda o: -o.score)[: c["max_warnings"]]
-    active.sort(key=lambda o: o.dist)
+    active.sort(key=straight_dist)
     return [warning_entry(o) for o in active]
 
 
+def straight_dist(o: Obj) -> float:
+    """Straight-line distance from the head centre to the object's nearest point (m).
+    o.dist is the horizontal part; o.el is that point's elevation."""
+    return max(o.dist, 0.0) / max(math.cos(math.radians(o.el)), 0.05)
+
+
 def warning_entry(o: Obj) -> dict:
-    w = {"id": o.id, "az": round(o.az, 1), "dist": round(max(o.dist, 0.0), 3), "level": o.level,
+    # "dist" is the straight-line distance, which is what audio/mixer.py (and its simulator) expect:
+    # it recovers the horizontal part itself as dist * cos(el). "hdist" is the horizontal distance.
+    w = {"id": o.id, "az": round(o.az, 1), "dist": round(straight_dist(o), 3), "level": o.level,
+         "hdist": round(max(o.dist, 0.0), 3),
          "kind": o.kind, "el": round(o.el, 1), "az_l": round(o.az_l, 1), "az_r": round(o.az_r, 1),
          "width_m": round(o.width_m, 3), "height_m": [round(o.z_min, 2), round(o.z_max, 2)],
          "closing_mps": round(o.closing_mps, 2)}

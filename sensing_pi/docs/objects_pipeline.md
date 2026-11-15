@@ -102,12 +102,16 @@ Every threshold is in `config/objects.json`. A rig file can override any of them
 
 ## Output to the audio engine (port 5556)
 ```json
-[{"id":"O7","az":3.0,"dist":1.773,"level":"warn",
+[{"id":"O7","az":3.0,"dist":0.842,"hdist":0.703,"level":"warn",
   "kind":"narrow","el":-33.4,"az_l":3.0,"az_r":3.2,"width_m":0.007,
-  "height_m":[-1.11,-0.88],"closing_mps":0.95,"ttc_s":1.86}]
+  "height_m":[-0.46,-0.40],"closing_mps":0.95,"ttc_s":0.74}]
 ```
-- **Fields the engine reads now:** `id`, `az`, `dist`, `level`.
-- **Extra fields:** the engine ignores them today; see `docs/audio_integration_guide.md`.
+- **Distances:**
+  - `dist` is the **straight-line** distance from the head centre to the object's nearest point.
+  - `hdist` is its horizontal part (`dist × cos(el)`).
+  - The audio mixer beeps on the horizontal part and goes urgent on the straight-line one. Warning levels and ranking on the Pi use `hdist`. The list is sorted nearest first by `dist`.
+- **Fields the engine reads now:** `id`, `az`, `el`, `dist`. It decides beeping and urgency from the distances itself and ignores `level`.
+- **Extra fields:** see `docs/audio_integration_guide.md`.
 - `ttc_s` is left out when the object isn't approaching.
 - `dist` is never null.
 

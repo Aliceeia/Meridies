@@ -12,7 +12,8 @@
 |---|---|---|---|
 | `id` | str `"O<n>"` | stable **object track id**; stays the same while the object is tracked | sticky voice slot ✔ |
 | `az` | float, deg | nearest point of the object, 0 = ahead, **+ right** | ✔, snapped to 15°, clamped ±90 |
-| `dist` | float, m | horizontal distance to the nearest point, never null | ✔ beep rate + lowpass |
+| `dist` | float, m | **straight-line** distance from the head centre to the nearest point, never null. The horizontal part is `dist × cos(el)` (also sent as `hdist`). | ✔ hum, beep rate, urgent; horizontal part = beep trigger |
+| `hdist` | float, m | horizontal distance to the nearest point (`dist × cos(el)`) | not read (mixer recomputes it) |
 | `level` | `"warn"` \| `"urgent"` \| `"wall"` | `"wall"` = corridor wall beside the user, under 0.5 m | only `"urgent"` is special; **`"wall"` currently beeps like warn** |
 | `kind` | `narrow` \| `wide` \| `wall_facing` \| `wall_oblique` \| `wall_parallel` | object type | ignored |
 | `az_l`, `az_r` | float, deg | left / right edge of the object | ignored |
