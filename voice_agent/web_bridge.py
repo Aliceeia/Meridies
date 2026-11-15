@@ -1,6 +1,6 @@
 """Browser audio for the agent: the laptop browser is the headset's mic + speaker.
 
-    python agent.py --web 8092        # then open http://localhost:8092 on the laptop
+    python agent.py --web 8092        # laptop: https://<pi>:8443 (self-signed cert) or http://localhost:8092 (forwarded)
 
 Use it when the agent runs on the Pi (which has no microphone) or when you'd rather not install PortAudio.
 Listens on 127.0.0.1 only: reach it through VS Code's port forwarding or `ssh -L 8092:localhost:8092 pi@...`.
@@ -89,16 +89,41 @@ class WebBridge:
             self.clients.discard(ws)
             print("[web] browser disconnected")
 
-    def _http(self, connection, request):
+    async def _http(self, connection, request):
         if request.path.startswith("/ws"):
             return None                                   # websocket upgrade
-        body = PAGE.replace("__CAMERA__", config.CAMERA_URL.replace("/snapshot.jpg", "/stream")).encode()
-        return Response(200, "OK", Headers([("Content-Type", "text/html; charset=utf-8"),
-                                            ("Content-Length", str(len(body))), ("Cache-Control", "no-store")]), body)
+        if request.path.startswith("/cam.jpg"):           # camera proxied through here: an https page can't load http
+            try:
+                body = await asyncio.to_thread(_fetch, config.CAMERA_URL)
+                return _resp(body, "image/jpeg")
+            except Exception:
+                return Response(503, "No camera", Headers([("Content-Length", "0")]), b"")
+        return _resp(PAGE.encode(), "text/html; charset=utf-8")
 
     async def start(self):
         await serve(self._handler, "127.0.0.1", self.port, process_request=self._http, max_size=2**20)
-        print(f"[web] open http://localhost:{self.port} on the laptop (VS Code forwards the port)")
+        print(f"[web] http://localhost:{self.port} (on the Pi, or via VS Code port forwarding)")
+        if CERT.exists():
+            import socket, ssl
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(CERT, CERT.with_name("key.pem"))
+            await serve(self._handler, "0.0.0.0", HTTPS_PORT, process_request=self._http, ssl=ctx, max_size=2**20)
+            print(f"[web] on the laptop open https://{config.PI_HOST}:{HTTPS_PORT}  (accept the certificate warning once)")
+
+
+CERT = config.HERE / "certs" / "cert.pem"     # self-signed: openssl req -x509 ... (see README)
+HTTPS_PORT = 8443
+
+
+def _fetch(url):
+    import urllib.request
+    with urllib.request.urlopen(url, timeout=3) as r:
+        return r.read()
+
+
+def _resp(body: bytes, ctype: str) -> Response:
+    return Response(200, "OK", Headers([("Content-Type", ctype), ("Content-Length", str(len(body))),
+                                        ("Cache-Control", "no-store")]), body)
 
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -119,7 +144,7 @@ form{display:flex;gap:8px;margin-top:10px}input{flex:1;font:inherit;padding:10px
 #meter{height:6px;border-radius:3px;background:var(--line);margin-top:10px;overflow:hidden}#lvl{height:100%;width:0;background:var(--acc)}
 </style></head><body><main>
 <section class="card"><h1>Cap camera</h1><p style="color:var(--mut);margin:4px 0 10px;font-size:13px">What the agent sees when you ask</p>
-<img src="__CAMERA__" alt="live cap camera feed"></section>
+<img id="cam" alt="live cap camera feed"></section>
 <section class="card"><div style="display:flex;align-items:center"><button id="go">Start talking</button><span id="status">not connected</span></div>
 <div id="meter"><div id="lvl"></div></div>
 <p style="color:var(--mut);font-size:13px">Try: "What am I looking at?", "Read that sign", "Guide me to the door", "What did I record here?"</p>
@@ -134,7 +159,7 @@ for(;this.p<x.length;this.p+=this.r){const v=Math.max(-1,Math.min(1,x[Math.floor
 this.p-=x.length;if(this.buf.length>=640){this.port.postMessage({pcm:Int16Array.from(this.buf).buffer,lvl:Math.sqrt(s/x.length)},);this.buf=[]}return true}}
 registerProcessor('mic',Mic)`;
 function connect(){
-  ws=new WebSocket(`ws://${location.host}/ws`);ws.binaryType='arraybuffer';
+  ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);ws.binaryType='arraybuffer';
   ws.onopen=()=>$('status').textContent='connected: listening';
   ws.onclose=()=>{$('status').textContent='disconnected, retrying…';setTimeout(connect,1500)};
   ws.onmessage=e=>{
@@ -162,4 +187,5 @@ $('go').onclick=async()=>{
 $('f').onsubmit=e=>{e.preventDefault();const t=$('t').value.trim();if(!t||!ws||ws.readyState!==1)return;
   ctx=ctx||new AudioContext();ctx.resume();ws.send(JSON.stringify({type:'text',text:t}));log('you',t);$('t').value=''};
 connect();
+(function cam(){const i=new Image();i.onload=()=>{$('cam').src=i.src;setTimeout(cam,250)};i.onerror=()=>setTimeout(cam,1500);i.src='/cam.jpg?'+Date.now()})();
 </script></body></html>"""
