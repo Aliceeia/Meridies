@@ -21,8 +21,11 @@
     if (has(/ (share it|share with|share) /)) return { act: "answer", choice: "share" };
     if (has(/ (help|what can i say|commands|what can you do) /)) return { act: "help" };
     if (has(/ (repeat|say (it|that) again|again|what did you say) /)) return { act: "repeat" };
-    if (has(/ (take off|remove|lift) (the )?blindfold | i want to see | let me see | exit blindfold /)) return { act: "unblind" };
+    if (has(/ (take off|remove|lift) (the )?blindfold | i want to see | let me see | exit blindfold | exit audio only( mode)? | (turn off|disable) audio only( mode)? | show (the )?screen /)) return { act: "unblind" };
+    if (has(/ (?:go |back |return )?(?:back )?(?:to )?(?:the )?(?:home|assistant|meri assistant) /)) return {act:"home"};
     if (has(/ (go back to |open )?(the )?gallery /)) return { act: "gallery" };
+    if (has(/ (?:play |listen to |hear |revisit |view |show )?(?:my|previous|old) memor(?:y|ies) /)) return {act:"suggestion", kind:"own"};
+    if (has(/ (?:play |listen to |hear )?(?:shared|friends|friend's|a friend's) memor(?:y|ies|y audio) /)) return {act:"suggestion", kind:"shared"};
     if (has(/ (record|leave a (memory|note)|remember this|start recording|new memory) /)) return { act: "record" };
     if (has(/ (where am i|where are we|what's around|what is around|look around|what's here|what is here) /)) return { act: "where" };
     if (has(/ (tell me more|more about|describe|what do you see|what's this place|what is this place|look closer) /)) return { act: "more" };
@@ -46,7 +49,7 @@
   const say = (text, opts = {}) => speak(text, { kind: "short", force: true, ...opts });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const arrived = async () => { while (state.target) await sleep(80); };
-  let lastTarget = null;
+  let lastTarget = null, motionSeq = 0;
 
   function roomOfSweep(s) {
     const r = (state.plan.rooms || []).find((r) => (r.floor ?? 0) === (s.floor ?? 0) && insidePoly(s.position.x, s.position.y, r.polygon));
@@ -90,6 +93,7 @@
     return path;
   }
   async function goTo(target) {
+    const ticket = motionSeq;
     if (!isInterior()) return say("I can only lead the way indoors.");
     const path = route(state.walker.sweep, target.sweep.index);
     if (!path) return say(`I can't find a way to ${target.label} from here.`);
@@ -100,11 +104,12 @@
                               `Okay, ${target.label}. About ${Math.max(1, Math.round(dist / 0.7))} steps. Follow me.`]));
     window.voiceRoute = true;                          // on the way: only hazards are spoken
     for (const i of path) {
-      if (!window.voiceRoute) return;                  // "stop" ends the route
+      if (!window.voiceRoute || ticket !== motionSeq) return;                  // "stop" ends the route
       goToSweep(i);
       await arrived();
       await sleep(250);
     }
+    if (ticket !== motionSeq) return;
     window.voiceRoute = false;
     if (target.memory) { play.near = target.memory.id; updateNearUI(); }
     if (typeof window.announceArrival === "function") window.announceArrival(target.memory ? "Here. The memory is close; say play." : "");
@@ -117,8 +122,11 @@
     if (Math.abs(deg) >= 180) say("Turned around.");
   }
   async function step(dir, n) {
+    const ticket = motionSeq;
     for (let k = 0; k < Math.min(n, 10); k++) {
+      if (ticket !== motionSeq) return;
       if (state.target) await arrived();
+      if (ticket !== motionSeq) return;
       const before = state.walker.sweep;
       document.body.dispatchEvent(new KeyboardEvent("keydown", { key: dir > 0 ? "ArrowUp" : "ArrowDown", bubbles: true }));
       await sleep(60);
@@ -128,7 +136,7 @@
   }
   const HELP = "You can say: go forward or back, turn left, right, or around. Take me to the kitchen, or to the " +
                "nearest memory. Where's the bedroom? Where am I, or tell me more. Play, stop, record, or repeat. " +
-               "Say take off the blindfold to see.";
+               "To record, say leave a memory, then stop recording when finished. Say keep it private or decide later when asked. Say exit audio-only mode to show the screen.";
 
   async function handle(text) {
     const c = parse(text);
@@ -136,13 +144,22 @@
       if (text.split(" ").length <= 6) say(Speech.vary("huh", ["Didn't catch that. Say help for what I can do.", "Sorry? Say help to hear the options."]));
       return null;
     }
+    if (["quiet", "turn", "step", "go-to", "go-last", "suggestion", "unblind"].includes(c.act)) {
+      motionSeq++; window.voiceRoute = false; state.target = null;
+    }
     earcon("tap");
     switch (c.act) {
-      case "quiet": window.voiceRoute = false; Speech.cancel(); stopVoice(); break;
+      case "quiet":
+        window.voiceRoute = false;
+        if (typeof moreController !== "undefined" && moreController) { moreController.abort(); moreController = null; stopThinking(); }
+        Speech.cancel(); stopVoice();
+        if (window.afterRecordState?.phase === "reviewing") document.body.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true}));
+        break;
       case "help": say(HELP, { kind: "help" }); break;
       case "repeat": if (Speech.lastText) say(Speech.lastText, { kind: "detail" }); break;
       case "unblind": setBlind(false); break;
-      case "gallery": location.href = "/"; break;
+      case "home": location.href="/"; break;
+      case "gallery": location.href = "/gallery"; break;
       case "record": if (!rec.mr) $("rec").click(); break;
       case "stopRecording": if (rec.mr) rec.stop("user"); break;
       case "answer": {
@@ -151,7 +168,16 @@
         break;
       }
       case "where": $("whereami").click(); break;
-      case "more": tellMeMore(); break;
+      case "more": /look closer|fresh description/.test(text.toLowerCase()) ? freshSceneDetail() : tellMeMore(); break;
+      case "suggestion": {
+        const m=MeriContext.choose(c.kind);
+        if(!m){say(c.kind==="own"?"You have no saved memories in this place yet.":"No recordings from your circle are available here.");break;}
+        if(relative(m).dist<=NEAR_M){Speech.cancel();await playVoice(m);break;}
+        const sweep=sweepAt(m.sweep);
+        if(!sweep){say("That memory is farther away. Open the gallery to revisit it.");break;}
+        await goTo({sweep,label:c.kind==="own"?"your previous memory":"the shared memory",memory:m});
+        break;
+      }
       case "play": {
         const m = (play.near && memById(play.near)) || state.memories.map((m) => ({ m, d: relative(m).dist }))
           .filter((x) => x.d <= NEAR_M).sort((a, b) => a.d - b.d).map((x) => x.m)[0];
@@ -183,112 +209,160 @@
   VC.route = route;
   VC.findTarget = findTarget;
 
-  // ---------- hearing ----------
-  const busy = () => !!(Speech.current || (typeof play !== "undefined" && play.src) || (window.speechSynthesis && speechSynthesis.speaking));
-  let mode = null, active = false, rec_ = null, quietSince = 0, lastBrowserWords = 0;
-  const heard = (text, via) => {
-    if (!text || !text.trim()) return;
-    if (via === "browser") lastBrowserWords = performance.now();
-    $("blind").firstElementChild.textContent = `“${text.trim()}”`;
-    handle(text.trim());
+  // One session owns its microphone, recognizer and pending requests.
+  const busy = () => !!(Speech.current || play.src || speechSynthesis.speaking);
+  let active = false, mode = null, generation = 0, mic = null, processor = null, source = null, sink = null;
+  let recognizer = null, recognizing = false, restarting = false, serverPending = false;
+  let lastBrowserWords = 0, mutedUntil = 0, controller = null, queued = null;
+  VC.status = { active:false, listening:false, awake:false, level:0, processing:false, error:null, lastCommand:null };
+  VC.setAwake = on => status({awake:on});
+  VC.recordingStream = () => mic && mic.getAudioTracks().some(t=>t.readyState === "live") ? mic.clone() : null;
+  const status = (patch) => {
+    Object.assign(VC.status, patch);
+    document.dispatchEvent(new CustomEvent('voice-control-status', {detail:{...VC.status}}));
   };
-
-  function startBrowser() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return false;
-    rec_ = new SR();
-    rec_.lang = "en-US"; rec_.continuous = true; rec_.interimResults = false; rec_.maxAlternatives = 1;
-    rec_.onresult = (e) => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) heard(e.results[i][0].transcript, "browser"); };
-    rec_.onerror = (e) => {
-      if (["network", "service-not-allowed", "language-not-supported"].includes(e.error)) {
-        console.warn("speech recognition unavailable (", e.error, "): the page's own listening carries on alone");
-        mode = "server"; try { rec_.abort(); } catch (_) {} rec_ = null;
-      }
-    };
-    rec_.onend = () => { if (active && mode === "browser") setTimeout(() => { if (active && !busy()) try { rec_.start(); } catch (_) {} }, 250); };
-    mode = "browser";
-    try { rec_.start(); } catch (_) {}
-    return true;
+  function heard(text, restricted = false) {
+    if (!active || !text?.trim()) return;
+    const wake = /\b(?:hi|hey|hello)\s+(?:meri|mary|merry|marie)\b/i;
+    const addressed = wake.test(text);
+    if (addressed) {
+      text = text.replace(wake, "").replace(/^[ ,.!:]+/, "");
+      setBlind(true);
+      if (!text.trim()) return;
+      clearTimeout(blind.welcomeTimer); Speech.cancel(); stopVoice();
+    } else if (!VC.status.awake) return;
+    if (/^(?:goodbye|bye)\s+(meri|mary|merry|marie)[.!]?$/i.test(text.trim())) { setBlind(false); return; }
+    if (/^(?:turn off|disable|stop) (?:the )?(?:microphone|mic)[.!]?$/i.test(text.trim())) { setBlind(false); setActive(false); return; }
+    if (/^retry (?:save|saving)[.!]?$/i.test(text.trim())) { retryPendingMemory(); return; }
+    let command = parse(text);
+    // While recording, narration belongs to the memory, never to navigation.
+    const simple = text.toLowerCase().replace(/[^a-z ]/g,'').trim();
+    if (rec.mr) {
+      const stop = simple.match(/(stop recording|finish recording|done recording|im done|i am done)$/);
+      if (!stop) return;
+      text = stop[1]; command = {act:"stopRecording"};
+    }
+    // During playback only an exact stop phrase can interrupt; other speech may be echo.
+    if (!rec.mr && !addressed && (restricted || busy()) && !/^(stop|pause|be quiet|stop speaking)$/.test(simple) && command?.act !== "answer" && command?.act !== "suggestion") return;
+    if (!command) return;
+    status({lastCommand:text.trim(), error:null});
+    $('blind').firstElementChild.textContent = `Heard: ${text.trim()}`;
+    handle(text.trim()).catch(() => say("I couldn't do that. Please try again."));
   }
-
-  // fallback: our own voice-activity detection on the microphone, then Gemini writes down the words
-  let mic = null;
-  async function startServer() {
-    if (mic) return;
-    try { mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    catch (e) { say("I can't use the microphone. Keys still work."); return; }
-    const ctx = audio.ctx(), src = ctx.createMediaStreamSource(mic), proc = ctx.createScriptProcessor(4096, 1, 1);
-    const sink = ctx.createGain(); sink.gain.value = 0;
-    src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
-    const rate = ctx.sampleRate, pre = [], seg = [];
-    let floor = 0.01, speaking = false, loud = 0, silent = 0, t0 = performance.now();
-    proc.onaudioprocess = (ev) => {
-      if (!active) return;
-      const x = new Float32Array(ev.inputBuffer.getChannelData(0));
-      const rms = Math.sqrt(x.reduce((s, v) => s + v * v, 0) / x.length);
-      if (busy()) { quietSince = performance.now(); speaking = false; seg.length = 0; return; }   // never hear ourselves
-      if (performance.now() - quietSince < 400) return;
-      if (!speaking) {
-        if (performance.now() - t0 < 1500) floor = Math.max(floor, rms);                         // learn the room
-        else floor = floor * 0.995 + rms * 0.005;
-        pre.push(x); if (pre.length > 3) pre.shift();
-        loud = rms > Math.max(0.02, floor * 3) ? loud + 1 : 0;
-        if (loud >= 2) { speaking = true; seg.push(...pre); silent = 0; }
-      } else {
-        seg.push(x);
-        silent = rms < Math.max(0.015, floor * 2) ? silent + 1 : 0;
-        const secs = seg.length * 4096 / rate;
-        if (silent * 4096 / rate > 0.7 || secs > 6) {
-          speaking = false;
-          const clip = seg.splice(0), saidAt = performance.now() - secs * 1000;
-          // Chrome's recogniser gets first go; if it produced no words for this speech, the server hears it
-          if (secs > 0.4) setTimeout(() => { if (lastBrowserWords < saidAt) send(clip, rate); }, mode === "browser" ? 1500 : 0);
-        }
+  function ensureBrowser() {
+    if (!active || mode !== 'browser' || recognizing || restarting || !recognizer) return;
+    try { recognizing = true; recognizer.start(); }
+    catch (_) { recognizing = false; }
+  }
+  function startBrowser(session) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { mode = 'server'; return; }
+    mode = 'browser';
+    const r = recognizer = new SR();
+    r.lang='en-US'; r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
+    r.onresult = e => {
+      if (!active || generation !== session) return;
+      for (let i=e.resultIndex;i<e.results.length;i++) if (e.results[i].isFinal) {
+        lastBrowserWords=performance.now(); heard(e.results[i][0].transcript);
       }
     };
-    if (!mode) mode = "server";
+    r.onerror = e => {
+      if (generation !== session || !active) return;
+      if (['network','service-not-allowed','language-not-supported','not-allowed','audio-capture'].includes(e.error)) {
+        mode='server'; recognizing=false;
+        try { r.abort(); } catch (_) {}
+        status({error:e.error === 'not-allowed' ? 'Browser recognition unavailable; using microphone transcription.' : null});
+      }
+    };
+    r.onend = () => {
+      if (generation !== session) return;
+      recognizing=false;
+      restarting=true;
+      setTimeout(() => { if (generation === session) { restarting=false; ensureBrowser(); } },350);
+    };
+    ensureBrowser();
   }
   function wav(chunks, rate) {
-    const n = chunks.reduce((s, c) => s + c.length, 0), step = rate / 16000, out = new Int16Array(Math.floor(n / step));
-    let i = 0, k = 0;
-    const all = new Float32Array(n); for (const c of chunks) { all.set(c, k); k += c.length; }
-    for (let j = 0; j < out.length; j++, i += step) out[j] = Math.max(-1, Math.min(1, all[Math.floor(i)])) * 32767;
-    const b = new DataView(new ArrayBuffer(44 + out.length * 2));
-    const w = (o, s) => [...s].forEach((ch, q) => b.setUint8(o + q, ch.charCodeAt(0)));
-    w(0, "RIFF"); b.setUint32(4, 36 + out.length * 2, true); w(8, "WAVE"); w(12, "fmt "); b.setUint32(16, 16, true);
-    b.setUint16(20, 1, true); b.setUint16(22, 1, true); b.setUint32(24, 16000, true); b.setUint32(28, 32000, true);
-    b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, "data"); b.setUint32(40, out.length * 2, true);
-    out.forEach((v, q) => b.setInt16(44 + q * 2, v, true));
-    return new Blob([b], { type: "audio/wav" });
+    const n=chunks.reduce((sum,c)=>sum+c.length,0), all=new Float32Array(n);
+    let offset=0; for(const c of chunks){all.set(c,offset);offset+=c.length;}
+    const count=Math.floor(n*16000/rate), b=new DataView(new ArrayBuffer(44+count*2));
+    const word=(o,s)=>[...s].forEach((c,i)=>b.setUint8(o+i,c.charCodeAt(0)));
+    word(0,'RIFF'); b.setUint32(4,36+count*2,true); word(8,'WAVE'); word(12,'fmt '); b.setUint32(16,16,true);
+    b.setUint16(20,1,true); b.setUint16(22,1,true); b.setUint32(24,16000,true); b.setUint32(28,32000,true);
+    b.setUint16(32,2,true);b.setUint16(34,16,true);word(36,'data');b.setUint32(40,count*2,true);
+    for(let i=0;i<count;i++)b.setInt16(44+i*2,Math.max(-1,Math.min(1,all[Math.floor(i*rate/16000)]))*32767,true);
+    return new Blob([b],{type:'audio/wav'});
   }
-  async function send(chunks, rate) {
-    audio.tone(990, 0.04, 0.04);                                      // a tick: heard you, working on it
+  async function send(chunks, rate, session, restricted, saidAt) {
+    if (!active || session !== generation || lastBrowserWords >= saidAt) return;
+    if (serverPending) { queued = [chunks,rate,session,restricted,saidAt]; return; }
+    serverPending=true; status({processing:true});
+    const abort=controller=new AbortController();
+    const timeout=setTimeout(()=>abort.abort(),10000);
     try {
-      const r = await fetch("/api/hear", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav(chunks, rate) });
-      const { text } = await r.json();
-      if (text) heard(text, "server");
-    } catch (_) { /* nothing: the person can say it again */ }
+      const response=await fetch('/api/hear',{method:'POST',headers:{'Content-Type':'audio/wav'},body:wav(chunks,rate),signal:abort.signal});
+      if (!response.ok) throw Error('transcription unavailable');
+      const body=await response.json();
+      if(active && session===generation && lastBrowserWords<saidAt) heard(body.text,restricted);
+    } catch (_) {
+      if(active && session===generation) { status({error:'Could not hear that. Please try again.'}); if (!busy() && !rec.mr) say('I could not hear that. Please try again.'); }
+    } finally { clearTimeout(timeout); if(session===generation){serverPending=false;controller=null;status({processing:false});const next=queued;queued=null;if(next)send(...next);} }
   }
-
-  function setActive(on) {
-    active = on;
-    if (on) {
-      // both: Chrome's recogniser (fast, when it works) and the page's own speech detection (always works)
-      if (!mode) startBrowser();
-      else if (mode === "browser" && rec_) try { rec_.start(); } catch (_) {}
-      startServer();
-    } else {
-      window.voiceRoute = false;
-      if (rec_) try { rec_.abort(); } catch (_) {}
+  async function setActive(on) {
+    if (on === active) return;
+    active=on;
+    const session=++generation;
+    status({active:on,listening:false,error:null,awake:false,level:0,processing:false});
+    if(!on){
+      motionSeq++; window.voiceRoute=false; state.target=null;
+      controller?.abort(); controller=null; serverPending=false; queued=null;
+      try { recognizer?.abort(); } catch (_) {}
+      recognizer=null;recognizing=false;restarting=false;mode=null;
+      if(processor){processor.onaudioprocess=null;processor.disconnect();}
+      source?.disconnect();sink?.disconnect();processor=source=sink=null;
+      mic?.getTracks().forEach(track=>track.stop());mic=null;
+      return;
     }
+    let stream;
+    try { stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}); }
+    catch (_) {
+      if(session!==generation)return;
+      active=false;status({active:false,listening:false,error:'Microphone permission is required. Allow access and activate audio-only mode again.'});
+      $('blind').firstElementChild.textContent=VC.status.error;
+      say('Microphone access is blocked. Allow microphone access, then turn audio-only mode on again.');
+      return;
+    }
+    if(!active || generation!==session){stream.getTracks().forEach(t=>t.stop());return;}
+    mic=stream;
+    const ctx=audio.ctx();
+    source=ctx.createMediaStreamSource(mic);processor=ctx.createScriptProcessor(4096,1,1);sink=ctx.createGain();sink.gain.value=0;
+    source.connect(processor);processor.connect(sink);sink.connect(ctx.destination);
+    const pre=[], segment=[]; let speaking=false, silent=0, restricted=false, lastMeter=0, noise=0.002;
+    processor.onaudioprocess=event=>{
+      if(!active || generation!==session)return;
+      const samples=new Float32Array(event.inputBuffer.getChannelData(0));
+      const rms=Math.sqrt(samples.reduce((sum,x)=>sum+x*x,0)/samples.length);
+      if(performance.now()-lastMeter>150){lastMeter=performance.now();status({level:Math.min(1,rms*15)});}
+      if(!speaking && rms<0.02)noise=noise*0.98+rms*0.02;
+      pre.push(samples);if(pre.length>3)pre.shift();
+      if(performance.now()<mutedUntil)return;
+      if(!speaking){if(rms<Math.max(0.008,noise*2.5))return;speaking=true;restricted=busy();segment.push(...pre);silent=0;}
+      else {segment.push(samples);restricted ||= busy();silent=rms<Math.max(0.005,noise*1.8)?silent+1:0;}
+      const secs=segment.length*4096/ctx.sampleRate;
+      if(silent*4096/ctx.sampleRate>0.7 || secs>6){
+        speaking=false;const clip=segment.splice(0),saidAt=performance.now()-secs*1000,limited=restricted;
+        mutedUntil=performance.now()+250;
+        if(secs>0.4)setTimeout(()=>send(clip,ctx.sampleRate,session,limited,saidAt),mode==='browser'?1000:0);
+      }
+    };
+    lastBrowserWords=0;mutedUntil=performance.now()+500;
+    startBrowser(session);status({listening:true,error:null});
   }
-  // pause the browser recogniser while anything is speaking, resume when quiet (it can't hear itself)
-  setInterval(() => {
-    if (!active || mode !== "browser" || !rec_) return;
-    if (busy()) { try { rec_.abort(); } catch (_) {} }
-  }, 200);
-  // listening follows the blindfold
-  new MutationObserver(() => setActive(!$("blind").hidden)).observe($("blind"), { attributes: true, attributeFilter: ["hidden"] });
-  VC.setActive = setActive;
-  VC.mode = () => mode;
+  // Browsers can end recognition spontaneously; resume while the session is enabled.
+  setInterval(ensureBrowser,750);
+  // Listening is explicitly armed by the microphone button; waking never replaces the scene.
+  window.addEventListener('pagehide',()=>setActive(false));
+  VC.setActive=setActive;
+  VC.mode=()=>mode;
+
 })(typeof window !== "undefined" ? window : globalThis);

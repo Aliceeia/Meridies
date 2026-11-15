@@ -1,0 +1,66 @@
+/* A full-scene walk: controls live over the place, never in a second scrolling column. */
+main { display:block; height:100dvh; }
+#stage { width:100%; height:100dvh; }
+main > aside { display:none; }
+#walkHud { position:absolute; inset:0; pointer-events:none; z-index:4; }
+#walkHud button, #walkHud a, #walkHud details, #walkHud select { pointer-events:auto; }
+.walk-top { position:absolute; top:20px; left:24px; right:24px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
+#walkBrand a, #walkLocation, #walkTools > button, #walkTools > details { background:rgba(19,17,15,.82); border:1px solid #ffffff26; border-radius:22px; padding:10px 16px; backdrop-filter:blur(16px); }
+#walkBrand a { display:block; color:#f5dfae; font-size:16px; }
+#walkLocation { font-size:14px; }
+#walkTools { display:flex; gap:8px; align-items:flex-start; }
+#walkTools #blindBtn { width:auto; font-size:14px; padding:10px 14px; }
+#walkTools #debug { margin:0; font-size:13px; max-width:350px; max-height:70vh; overflow:auto; pointer-events:auto; }
+#walkTools #debug summary { color:#f5dfae; }
+#recordDock { position:absolute; bottom:32px; left:50%; transform:translateX(-50%); width:min(300px,46vw); text-align:center; }
+#recordDock #rec, #recordDock #recStop { width:100%; font-size:16px; padding:16px 22px; border-radius:999px; box-shadow:0 6px 30px #0005; }
+#recordDock #recState { position:absolute; width:100%; bottom:60px; font-size:14px; color:#fff; text-shadow:0 1px 5px #000; }
+#askDock { position:absolute; right:24px; bottom:32px; display:flex; flex-direction:column; gap:8px; }
+#askDock #whereami, #askDock #tellmore { width:auto!important; margin:0!important; padding:12px 18px; font-size:15px; border:1px solid #ffffff35; border-radius:999px; background:rgba(19,17,15,.86); backdrop-filter:blur(16px); }
+#spokenCaption { position:absolute; right:24px; bottom:150px; max-width:min(360px,80vw); font-size:13px; background:#14110fe8; border-radius:16px; padding:10px 14px; }
+#spokenCaption summary { cursor:pointer; color:#d4c3aa; }
+#captionBody { max-height:26vh; overflow:auto; }
+#whereText, #tellText { font-size:14px!important; }
+#memoryPopover { position:absolute; left:50%; top:54%; transform:translate(-50%,-50%); width:min(420px,calc(100vw - 32px)); background:#181613f2; border:1px solid #f2c87966; border-radius:22px; padding:16px; pointer-events:auto; backdrop-filter:blur(18px); box-shadow:0 18px 60px #0007; }
+#memoryPopover[hidden] { display:none; }
+.memory-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#f3d69c; font-size:15px; }
+#closeMemory { padding:2px 10px; font-size:24px; background:none; border:0; }
+#memoryActions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+#memoryActions button, #memoryActions select { font-size:14px; padding:10px 14px; }
+#memoryActions label { width:100%; color:#bcb3a6; font-size:14px; }
+#memoryActions button:first-child { background:#edce89; color:#21190e; border:0; }
+#memoryFeedback { font-size:13px; color:#d8c9b1; margin:10px 0 0; }
+#blind { flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:32px; text-align:center; cursor:auto; }
+#blind > div { max-width:620px; }
+#audioListeningStatus { font-size:15px; color:#b3a596; max-width:620px; }
+#exitAudioMode { border-radius:999px; }
+#meriStatus { position:absolute;right:0;top:58px;max-width:min(340px,80vw);padding:8px 12px;border-radius:14px;background:#14110fe8;pointer-events:auto; }
+#meriStatus meter { width:100%;height:8px;display:block;accent-color:#edce89; }
+#audioListeningStatus { font-size:12px;margin:4px 0 0; }
+#retrySave { margin:8px auto;background:#edce89;color:#21190e;font-size:14px; }
+#retrySave[hidden] { display:none; }
+.memdot { border:1px solid #ffe6a47a; box-shadow:0 0 28px #f2c87960; }
+.memdot, .memdot.landed { animation:memoryPulse 3s ease-in-out infinite; }
+@keyframes memoryPulse { 50% { filter:brightness(1.35); box-shadow:0 0 40px #f2c87990; } }
+@media(prefers-reduced-motion:reduce) { .memdot, .memdot.landed { animation:none; transition:none; } }
+.memdot:focus-visible, button:focus-visible, a:focus-visible { outline:3px solid #ffe0a3; outline-offset:5px; }
+#pad { z-index:5; bottom:28px; }
+#toast { z-index:8; bottom:125px; }
+#decide { width:min(380px,100vw); top:auto; bottom:112px; right:24px; border:1px solid var(--line); border-radius:24px; max-height:70vh; overflow:auto; }
+#decide .opt { min-height:75px; padding:12px 18px; }
+#decide .opt .t { font-size:20px; }
+#decide .opt .ic { display:none; }
+@media(max-width:700px) {
+  .walk-top { top:12px; left:12px; right:12px; }
+  #walkLocation { display:none; }
+  #walkTools #blindBtn { font-size:12px; }
+  #recordDock { bottom:22px; width:230px; }
+  #recordDock #rec, #recordDock #recStop { font-size:14px; white-space:nowrap; }
+  #askDock { bottom:98px; right:12px; }
+  #spokenCaption { bottom:205px; right:12px; }
+  #pad { left:12px; bottom:96px; grid-template-columns:repeat(3,42px); gap:4px; }
+  #pad button { width:42px; height:42px; }
+  #decide { right:8px; bottom:85px; }
+}
+
+#walkBrand{display:flex;gap:8px;align-items:center}#walkBrand a{font-size:13px;white-space:nowrap}@media(max-width:600px){#walkBrand{position:absolute;left:0;top:0;flex-direction:column;align-items:flex-start}#walkTools{margin-left:auto}#walkBrand a{padding:8px 12px;font-size:12px}}

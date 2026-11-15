@@ -72,14 +72,20 @@ def view_png(bid: str, sweep: int, heading_deg: float) -> bytes:
         return jpg.read_bytes()
 
 
+REPOSITORY = None
+
 MEM_LOCK = threading.RLock()   # every read-modify-write of a memory record goes through update()
 
 
 def load(mid):
+    if REPOSITORY is not None:
+        return REPOSITORY.load(mid)
     return json.loads((MEM / f"{mid}.json").read_text())
 
 
 def save(meta):
+    if REPOSITORY is not None:
+        REPOSITORY.save(meta)
     MEM.mkdir(parents=True, exist_ok=True)
     tmp = MEM / f"{meta['id']}.json.tmp"
     tmp.write_text(json.dumps(meta, indent=1))
@@ -110,7 +116,7 @@ def settings() -> dict:
 def all_memories(include_hidden=False):
     """Every memory, minus the seeded samples while they are hidden (one switch hides them from every view)."""
     files = sorted(f for f in MEM.glob("*.json") if ID_RE.match(f.stem)) if MEM.exists() else []
-    out = [json.loads(f.read_text()) for f in files]
+    out = REPOSITORY.all() if REPOSITORY is not None else [json.loads(f.read_text()) for f in files]
     return [m for m in out if not m.get("is_sample")] if settings().get("hide_samples") and not include_hidden else out
 
 
@@ -279,7 +285,7 @@ def apply_choice(m: dict, choice: str, reason: str) -> tuple[int, str | None]:
 
 
 def public(meta, viewer=None):
-    out = {k: v for k, v in meta.items() if k not in ("audio_file", "decisions")}
+    out = {k: v for k, v in meta.items() if k not in ("audio_file", "audioId", "decisions")}
     if out.get("share_request") and viewer != meta.get("author_id"):
         out["share_request"] = {"status": out["share_request"]["status"]}   # review details are the author's business
     out["reports"] = len(meta.get("reports") or []) if viewer != meta.get("author_id") else meta.get("reports") or []
@@ -502,8 +508,10 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         parts = [p for p in u.path.split("/") if p]
-        if not parts or (len(parts) == 2 and parts[0] == "f"):     # gallery; /f/<token> = family view
+        if parts == ["gallery"] or (len(parts) == 2 and parts[0] == "f"):     # gallery; /f/<token> = family view
             return self.file(FRONT / "gallery.html", "text/html; charset=utf-8")
+        if not parts:
+            return self.file(FRONT / "home.html", "text/html; charset=utf-8")
         if parts == ["walk"]:                                       # the 3D walk ("Take me there")
             return self.file(FRONT / "index.html", "text/html; charset=utf-8")
         if parts == ["live"]:                                       # the hat: realtime, works offline
@@ -571,30 +579,17 @@ class Handler(BaseHTTPRequestHandler):
             text, style = (q.get("text") or "").strip(), q.get("style", "calm")
             if not VOICE_ON or not text or len(text) > 600 or style not in voice.STYLE:
                 return self.err(404, "no clip")
-            v = settings().get("voice", voice.DEFAULT_VOICE)
-            p = voice.cached(text, style, v)
-            if not p and q.get("wait") == "1" and VOICE_AUTOGEN:
-                # a line the person asked for (where am I, tell me more): stream the neural voice as it is made, so
-                # it starts in about a second; Gemini's version is made in the background for next time
-                gen = voice.stream_edge(text, style, v)
+            # One provider and one female voice: never substitute Edge/browser speech.
+            v = "Sulafat"
+            p = voice.path_for(text, style, v)
+            p = p if p.exists() else None
+            if p is None and q.get("wait") == "1":
                 try:
-                    first = next(gen)
-                except Exception as e:  # noqa: BLE001
-                    print(f"  voice: couldn't make a clip now: {e!r}"[:160], flush=True)
-                    return self.err(503, "no voice right now")
-                self.send_response(200)
-                self.send_header("Content-Type", "audio/mpeg")
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                try:
-                    self.wfile.write(first); self.wfile.flush()
-                    for c in gen:
-                        self.wfile.write(c); self.wfile.flush()
-                except (ConnectionError, OSError):
-                    pass                                     # the person cut it off: that's fine
-                if voice.gemini_available():
-                    voice.queue(text, style, v)
-                return
+                    p = voice.ensure(text, style, v, gemini_only=True)
+                except voice.GeminiQuotaError:
+                    return self.err(429, "Gemini speech quota reached. Cached audio still works; new speech requires quota to be available.")
+                except Exception:
+                    return self.err(503, "Gemini voice is temporarily unavailable")
             if p:
                 self.send_response(200)
                 self.send_header("Content-Type", "audio/mpeg" if p.suffix == ".mp3" else "audio/wav")
@@ -603,7 +598,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "max-age=86400")
                 self.end_headers()
                 return self.wfile.write(body)
-            queued = voice.queue(text, style, v) if VOICE_AUTOGEN and q.get("queue") != "0" else False
+            queued = False
             return self.send(404, {"error": "no clip yet", "queued": queued})
         if parts == ["api", "settings"]:
             from connect.backend import voice
@@ -653,6 +648,19 @@ class Handler(BaseHTTPRequestHandler):
         parts = [p for p in u.path.split("/") if p]
         if "family" in q:
             return self.err(403, "a family link is read-only")
+        if parts == ["api", "meri", "chat"]:
+            from connect.backend import meri_agent
+            try:
+                req = json.loads(self.body() or b"{}")
+                if not isinstance(req, dict):
+                    raise ValueError("request must be an object")
+                viewer = str(req.get("viewer", ""))
+                memories = [m for m in all_memories() if can_see(m, viewer)]
+                plans = {bid: desc.load_plan(bid) for bid in desc.BUILDINGS}
+                answer = meri_agent.respond(req.get("question", ""), viewer, memories, plans, req.get("history"))
+            except (ValueError, TypeError):
+                return self.err(400, "invalid Meri question")
+            return self.send(200, answer)
         if parts == ["api", "memories"]:
             ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip()
             if ctype not in AUDIO_EXT:
@@ -868,6 +876,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    from connect.backend.memory_repository import MemoryRepository
+    try:
+        REPOSITORY = MemoryRepository(MEM)
+        imported = REPOSITORY.migrate()
+        print(f"Memory storage: {'MongoDB' if REPOSITORY.db is not None else 'local files'}; imported {imported} records")
+    except Exception:
+        sys.exit("Cannot initialize memory storage. Check MongoDB configuration and network access.")
     # On Windows, SO_REUSEADDR lets a second server bind the same port and silently share it with an old one
     # (requests then hit stale code). Refuse instead.
     ThreadingHTTPServer.allow_reuse_address = False

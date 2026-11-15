@@ -262,7 +262,9 @@ const audio = {
     return this._ctx;
   },
   // short sine tone with fades; dest defaults to master
+  uiSounds: false,
   tone(freq, dur, gain = 0.2, when = 0, dest = null) {
+    if (!this.uiSounds) return;
     const c = this.ctx(), t0 = c.currentTime + when;
     const o = c.createOscillator(), g = c.createGain();
     o.frequency.value = freq;
@@ -276,13 +278,17 @@ const audio = {
 };
 
 // ---------- memories ----------
-state.user = "user-a";
+state.user = localStorage.getItem("meridies.user") || "user-a";
 state.memories = [];
 const memById = (id) => state.memories.find((m) => m.id === id);
 
 async function loadMemories() {
   const q = new URLSearchParams({ viewer: state.user, building_id: state.plan.building.id });
-  state.memories = await (await fetch(`/api/memories?${q}`)).json();
+  const response = await fetch(`/api/memories?${q}`);
+  if(!response.ok)throw Error("Could not refresh memories");
+  const records=await response.json();
+  if(!Array.isArray(records))throw Error("Invalid memory list");
+  state.memories=records;
   renderMemories();
 }
 
@@ -340,12 +346,15 @@ async function startRecording() {
   rec.anchor = { x: +w.x.toFixed(2), y: +w.y.toFixed(2), z: 1.5 };
   rec.facing = { heading_deg: +w.heading.toFixed(1), ...(w.sweep != null ? { sweep: w.sweep } : {}) };
   try {
-    rec.stream = await navigator.mediaDevices.getUserMedia({
+    rec.stream = (window.voiceControl?.recordingStream()) || await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true }, // AEC keeps our own cue tones out of the take
     });
   } catch (e) {
     rec.anchor = null;
-    console.warn("microphone:", e.name); return toast("Microphone isn't available", 3000);
+    $("recState").textContent = "Microphone unavailable. Check browser permission and selected input.";
+    speak("I cannot access the microphone. Check microphone permission and input device.", {kind:"short",force:true});
+    document.dispatchEvent(new CustomEvent("recording-failed"));
+    return;
   }
   const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
   const mr = (rec.mr = new MediaRecorder(rec.stream, mime ? { mimeType: mime } : {}));
@@ -383,38 +392,51 @@ async function startRecording() {
   }, 350);
 }
 
+let pendingMemory = null, uploadingMemory = false;
 async function finishRecording(blob) {
   clearInterval(rec.timer);
-  rec.stream.getTracks().forEach((t) => t.stop()); // mic closed
-  document.body.classList.remove("recording");
-  $("recStop").hidden = true;
-  showRecMarker(false);
-  const interrupted = rec.interrupted, autoStopped = rec.autoStopped;
-  // end cue: falling tones confirm it stopped. Never during an obstacle warning: the warning has priority.
-  if (!interrupted) { audio.tone(880, 0.12, 0.25); audio.tone(660, 0.12, 0.25, 0.15); }
-  $("recState").textContent = "Saving…";
-  const a = rec.anchor;
-  rec.facingSaved = rec.facing;
-  rec.mr = null; rec.stream = null; rec.anchor = null; rec.facing = null;
-  if (!blob.size) { $("recState").textContent = ""; document.dispatchEvent(new CustomEvent("recording-failed")); return; }
-  try {
-    // Saved PRIVATE on the server the moment it lands; an interrupted take is a private DRAFT.
-    const q = new URLSearchParams({ ...a, ...rec.facingSaved, building_id: state.plan.building.id, author_id: state.user,
-                                    ...(interrupted ? { draft: "1" } : {}) });
-    const r = await fetch(`/api/memories?${q}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
-    const saved = await r.json();
-    if (!r.ok) throw new Error(saved.error);
-    $("recState").textContent = interrupted ? "Stopped for the warning. Kept as a private draft." : "It's here now.";
-    await loadMemories();
-    const detail = { ...saved, interrupted, autoStopped };
-    document.dispatchEvent(new CustomEvent("memory-saved", { detail }));
-    document.dispatchEvent(new CustomEvent("recording-finished", { detail }));
-  } catch (e) {
-    $("recState").textContent = "";
-    console.warn("save failed:", e.message); toast("Couldn't save — try again", 4000);
-    document.dispatchEvent(new CustomEvent("recording-failed"));
+  rec.stream?.getTracks().forEach(t=>t.stop());
+  document.body.classList.remove('recording');
+  $('recStop').hidden=true; showRecMarker(false);
+  const take={blob, position:rec.anchor, facing:rec.facing, building:state.plan.building.id,
+    author:state.user, interrupted:rec.interrupted, autoStopped:rec.autoStopped};
+  rec.mr=null;rec.stream=null;rec.anchor=null;rec.facing=null;
+  if(!blob.size){
+    $('recState').textContent='No audio was captured. Please record again.';
+    speak('No audio was captured. Please record again.',{kind:'short',force:true});
+    document.dispatchEvent(new CustomEvent('recording-failed'));return;
   }
-  setTimeout(() => ($("recState").textContent = ""), 4000);
+  pendingMemory=take;
+  await retryPendingMemory();
+}
+async function retryPendingMemory() {
+  if(!pendingMemory || uploadingMemory)return;
+  const take=pendingMemory;uploadingMemory=true;
+  $('rec').disabled=true;$('retrySave')?.setAttribute('hidden','');
+  $('recState').textContent='Saving your memory…';
+  try {
+    const query=new URLSearchParams({...take.position,...take.facing,building_id:take.building,author_id:take.author,...(take.interrupted?{draft:'1'}:{})});
+    const response=await fetch(`/api/memories?${query}`,{method:'POST',headers:{'Content-Type':take.blob.type || 'audio/webm'},body:take.blob});
+    if(!response.ok)throw Error(`Upload failed (${response.status})`);
+    const saved=await response.json();
+    // A successful upload stays saved even if refreshing the list fails.
+    try { await loadMemories(); }
+    catch (_) {
+      if(!state.memories.some(m=>m.id===saved.id))state.memories.push(saved);
+      renderMemories();
+    }
+    pendingMemory=null;
+    $('recState').textContent='Memory saved. Only you can hear it.';
+    const detail={...saved,interrupted:take.interrupted,autoStopped:take.autoStopped};
+    document.dispatchEvent(new CustomEvent('memory-saved',{detail}));
+    document.dispatchEvent(new CustomEvent('recording-finished',{detail}));
+    if(take.interrupted)speak('Your memory is saved privately.',{kind:'short',force:true});
+  } catch (_) {
+    $('recState').textContent='Not saved yet. Your recording is kept here. Say “retry save” or use Retry save.';
+    $('retrySave')?.removeAttribute('hidden');
+    speak('The upload failed. I still have your recording. Say retry save. Keep this page open.',{kind:'detail',force:true});
+    document.dispatchEvent(new CustomEvent('recording-failed'));
+  } finally { uploadingMemory=false;$('rec').disabled=!!pendingMemory; }
 }
 
 function showRecMarker(on) {
@@ -485,6 +507,7 @@ function placePanner(p, m) {
   } else p.setPosition(r.right, 0, -r.fwd);
 }
 function chime(m) {
+  if (!audio.uiSounds) return;
   if (state.hatWarning) return;
   const p = makePanner();
   placePanner(p, m);

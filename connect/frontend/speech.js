@@ -85,7 +85,7 @@
     muted: () => false,                                // a page can mute speech (e.g. while the hat warns)
     tone: null,                                        // a page can give oops() its error tone
     lastText: "", lastDone: 0, current: null,
-    say(text, { kind = "any", force = false, onend = null } = {}) {
+    say(text, { kind = "any", force = false, onend = null, prepared = false } = {}) {
       if (!force && S.muted()) return "";
       const t = shape(text, kind);
       if (!t) return "";
@@ -100,10 +100,75 @@
         if (S.current === tok) S.current = null;
         onend && onend(tok.cut);
       };
-      if (onend) setTimeout(tok.finish, 2500 + seconds(t) * 1000 * 1.5);   // some engines never fire "end"
-      if (S.useVoice && typeof fetch !== "undefined") S._clips(t, kind, tok); else S._tts(t, tok, kind);
+      const endTimer = !S.useVoice && setTimeout(tok.finish, 2500 + seconds(t) * 1000 * 1.5);   // some engines never fire "end"
+      endTimer?.unref?.();
+      if(S.useVoice && typeof Audio !== "undefined") {
+        S._sentences(t,kind,tok,prepared);
+      } else S._tts(t,tok,kind);
       return t;
     },
+    _audioCache: new Map(),
+    _audioQueue: [],
+    _audioPending: 0,
+    _quotaUntil: 0,
+    _parts(text,kind){return shape(text,kind).split(/(?<=[.!?])\s+/).filter(Boolean);},
+    _audioFor(text,cacheOnly=false){
+      if(S._audioCache.has(text))return S._audioCache.get(text);
+      const promise=new Promise((resolve,reject)=>{
+        S._audioQueue.push({text,resolve,reject,cacheOnly});S._drainAudio();
+      });
+      S._audioCache.set(text,promise);
+      promise.catch(()=>{S._audioCache.delete(text);});
+      while(S._audioCache.size>48){S._audioCache.delete(S._audioCache.keys().next().value);}
+      return promise;
+    },
+    _drainAudio(){
+      while(S._audioPending<2 && S._audioQueue.length){
+        const item=S._audioQueue.shift();S._audioPending++;
+        const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),30000);
+        fetch(`/api/voice?text=${encodeURIComponent(item.text)}&style=calm&wait=${item.cacheOnly||Date.now()<S._quotaUntil?0:1}&provider=gemini`,{signal:abort.signal})
+          .then(async r=>{
+            if(r.status===429){
+              S._quotaUntil=Date.now()+3600000;
+              const error=Error('Gemini speech quota reached. Cached audio still works; new speech is temporarily unavailable.');
+              for(const waiting of S._audioQueue.splice(0))waiting.reject(error);
+              throw error;
+            }
+            if(!r.ok)throw Error('Gemini voice is temporarily unavailable.');return r.blob();
+          })
+          .then(blob=>item.resolve(blob)).catch(item.reject)
+          .finally(()=>{clearTimeout(timer);S._audioPending--;S._drainAudio();});
+      }
+    },
+    prefetch(text,kind='any',cacheOnly=false){
+      // Warm the first sentence only: bounded cloud work; subsequent speech is fetched on demand.
+      const first=S._parts(text,kind)[0];if(first)S._audioFor(first,cacheOnly).catch(()=>{});
+    },
+    async _sentences(text,kind,tok,prepared=false){
+      const parts=S._parts(text,kind);
+      const clips=parts.map(part=>S._audioFor(part,prepared));
+      clips.forEach(p=>p.catch(()=>{}));
+      try{
+        for(let i=0;i<clips.length;i++){
+          const blob=await clips[i];if(tok.cut)return;
+          const url=URL.createObjectURL(blob),a=tok.audio=new Audio(url);
+          a.preservesPitch=true;
+          await new Promise((resolve,reject)=>{
+            a.onplaying=()=>{if(tok.cut){a.pause();resolve();return;}tok.startedAt ||= performance.now();};
+            a.onended=resolve;a.onerror=reject;
+            tok.releaseClip=()=>{a.pause();resolve();};
+            a.play().catch(reject);
+          }).finally(()=>{URL.revokeObjectURL(url);tok.releaseClip=null;});
+          if(tok.cut)return;
+        }
+        tok.finish();
+      }catch(error){
+        if(tok.cut)return;
+        tok.cut=true;tok.finish();
+        document.dispatchEvent(new CustomEvent('speech-unavailable',{detail:prepared?'This location’s sample voice is not generated yet. The text is available.':error.message || 'Gemini voice is temporarily unavailable.'}));
+      }
+    },
+
     // the human voice: one cached clip per sentence, played in order. If any is missing, the whole line uses the
     // browser voice (never two voices in one line); the server makes the missing clips for next time.
     _clips(t, kind, tok) {
@@ -141,11 +206,14 @@
       a.playbackRate = PACE[style] || 1;
       let started = false, fell = false;
       // the error event AND the failed play() both land here: speak the fallback once, not twice
-      const fallback = () => { if (!started && !fell && !tok.cut) { fell = true; S._tts(t, tok, kind); } };
-      a.onplaying = () => { started = true; };
+      const fallback = () => { if (!started && !fell && !tok.cut) {
+        fell=true;a.pause();a.removeAttribute("src");a.load();tok.cut=true;tok.finish();
+        document.dispatchEvent(new CustomEvent("speech-unavailable",{detail:"Gemini voice is unavailable. Please try again shortly."}));
+      } };
+      a.onplaying = () => { if (fell || tok.cut) return a.pause(); started = true; tok.startedAt = performance.now(); };
       a.onended = () => tok.finish();
       a.onerror = fallback;
-      setTimeout(() => { if (!started && !tok.cut) { a.pause(); fallback(); } }, 12000);
+      setTimeout(() => { if (!started && !tok.cut) { a.pause(); fallback(); } }, 30000);
       a.play().catch(fallback);
     },
     _play(blobs, styles, t, kind, tok) {
@@ -170,15 +238,17 @@
       const u = new SpeechSynthesisUtterance(t);
       u.lang = "en-US";
       const v = S.voice || S.pickVoice();
-      if (v) u.voice = v;
+      if (!v) { tok.cut = true; tok.finish(); return; }
+      u.voice = v;
       const first = styleOf(t.split(/(?<=[.!?…])\s+/)[0] || t, kind);
-      u.rate = TTS_RATE[first] || 0.95; u.pitch = first === "alert" ? 1.0 : 1.04; u.volume = first === "alert" ? 1 : 0.92;
+      u.rate = first === "alert" ? 1.08 : 1.0; u.pitch = 1.0; u.volume = 1.0;
+      u.onstart = () => { tok.startedAt = performance.now(); };
       u.onend = tok.finish; u.onerror = () => { tok.cut = true; tok.finish(); };
       speechSynthesis.speak(u);
     },
     cancel() {                                         // cut off mid-sentence; it does not count as heard
       const tok = S.current;
-      if (tok) { tok.cut = true; if (tok.audio) tok.audio.pause(); }
+      if (tok) { tok.cut = true; if (tok.audio) tok.audio.pause(); tok.releaseClip?.(); }
       if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
       S.current = null;
       S.lastDone = 0;
@@ -191,11 +261,14 @@
     voice: null,
     pickVoice() {
       if (typeof speechSynthesis === "undefined") return null;
-      const PREFS = [/(Ava|Aria|Jenny|Emma|Michelle|Sonia|Libby|Natasha|Clara).*(Natural|Online)/i, /(Natural|Neural)/i,
-                     /Google US English/i, /Google UK English Female/i, /Samantha/i, /Zira/i];
-      const vs = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
-      for (const re of PREFS) { const v = vs.find((x) => re.test(x.name)); if (v) return (S.voice = v); }
-      return (S.voice = vs[0] || null);
+      if(S.voice) return S.voice; // lock the voice for the whole page session
+      const vs=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang));
+      const preferences=[/Zira/i,/Samantha/i,/Microsoft (?:Aria|Jenny|Emma|Ava)/i,/Google UK English Female/i];
+      for(const pref of preferences){const v=vs.find(v=>pref.test(v.name));if(v)return S.voice=v;}
+      const localFemale=speechSynthesis.getVoices().find(v=>/Huihui|Yaoyao/i.test(v.name));
+      if(localFemale)return S.voice=localFemale;
+      return null; // never silently select a male/default voice
+
     },
   };
 

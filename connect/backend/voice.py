@@ -219,6 +219,10 @@ def now(text: str, style: str, voice: str) -> Path:
     return e
 
 
+class GeminiQuotaError(Exception):
+    code = 429
+
+
 def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE, gemini_only: bool = False) -> Path:
     """The clip on disk, generating it if missing: Gemini first; when Gemini is out of quota (or fails), the
     neural fallback voice, so a line is never left to the robotic browser voice."""
@@ -226,6 +230,8 @@ def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE, gemini_on
     p = path_for(text, style, voice)
     if p.exists():
         return p
+    if gemini_only and not gemini_available():
+        raise GeminiQuotaError("Gemini speech quota is temporarily exhausted")
     if gemini_available() or gemini_only:
         try:
             return _write(p, synth(text, style, voice))
@@ -233,6 +239,8 @@ def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE, gemini_on
             if "429" in str(last_error):
                 gemini_blocked_until = time.time() + 3600     # daily cap: stop asking for an hour
             if gemini_only:
+                if "429" in str(last_error):
+                    raise GeminiQuotaError("Gemini speech quota is temporarily exhausted") from None
                 raise
     e = edge_path(text, style, voice)
     return e if e.exists() else _write(e, synth_edge(text, style))

@@ -53,6 +53,12 @@
   const _load = loadBuilding;
   loadBuilding = async function (bid) {               // eslint-disable-line no-func-assign
     await _load(bid);
+    const targetRoom = params.get('targetRoom');
+    if(targetRoom && !used && isInterior()){
+      const target = state.plan.sweeps.find(s=>(s.room||'').toLowerCase()===targetRoom.toLowerCase());
+      if(target){Object.assign(state.walker,{x:target.position.x,y:target.position.y,sweep:target.index,heading:0});state.target=null;renderWalker();}
+      used=true;return;
+    }
     if (!wantId || used) return;                       // only the first load; switching buildings later is normal
     used = true;
     const m = memById(wantId);

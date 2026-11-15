@@ -186,7 +186,8 @@ function entry(m) {
         el("time", { datetime: m.created_at }, timeOf(m.created_at)), el("span", { class: "dot", "aria-hidden": "true" }),
         el("span", {}, `${p.name}, ${shortBuilding(p.building.name)}`),
         v.quiet ? el("span", { class: "sr" }, `. ${v.label}.`) : el("span", { class: `state ${v.cls}` }, v.label),
-        G.mode === "shared" ? el("span", {}, `from ${nameOf(m.author_id)}`) : null),
+        G.mode === "shared" ? el("span", {}, `from ${nameOf(m.author_id)}`) : null,
+        m.is_public_demo ? el("span", {class:"state"}, "Scripted demo") : null),
       el("button", { class: `excerpt${line.quiet ? " quiet" : ""}`, onclick: open, "aria-label": `Open memory: ${line.text}` },
         line.quiet ? line.text : `“${line.text}”`),
       el("div", { class: "row" }, playBtn,
@@ -282,7 +283,7 @@ function openDetail(m, opener) {
   $("dSaid").className = line.quiet ? "quiet" : "";
   $("dAbout").textContent = m.description ? m.description.text : "Not described yet.";
   $("dCredit").textContent = [m.description ? `Described from the scan by ${m.description.model}.` : "",
-    m.is_sample && G.mode === "author" ? "Sample memory: scripted, read by a computer voice." : ""].filter(Boolean).join(" ");
+    m.is_public_demo || (m.is_sample && G.mode === "author") ? "Sample memory: scripted, read by a computer voice." : ""].filter(Boolean).join(" ");
   $("dMore").hidden = true; $("dMoreText").textContent = "";
   const more = el("button", { class: "btn", onclick: async () => {
     more.disabled = true; more.textContent = "…";

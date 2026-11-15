@@ -67,8 +67,7 @@ document.addEventListener("memory-saved", (e) => {
 let thinking = null;
 function startThinking() {
   stopThinking();
-  thinking = setInterval(() => audio.tone(740, 0.05, 0.035), 1600);
-  audio.tone(740, 0.05, 0.035);
+  // Waiting is silent; spoken responses and recordings remain audible.
 }
 function stopThinking() { clearInterval(thinking); thinking = null; }
 document.addEventListener("click", (e) => {
@@ -123,21 +122,23 @@ memHooks.push(() => {
 // No path is kept: only which memories were reached and heard. We never map where someone went.
 const blind = { on: false, t0: 0, reached: new Set(), heard: new Set(), timer: null };
 function setBlind(on) {
-  if (on === blind.on) return;
+  if (on === blind.on) { if(on) { clearTimeout(blind.welcomeTimer); blind.welcomeTimer=setTimeout(()=>speak(MeriContext.greeting(),{kind:"help",force:true}),250); } return; }
   blind.on = on;
   document.body.classList.toggle("blind", on);
-  $("blind").hidden = !on;
+  $("blind").hidden = true;
+  voiceControl.setAwake(on);
   document.activeElement && document.activeElement.blur();
   if (on) {
     Object.assign(blind, { t0: performance.now(), reached: new Set(), heard: new Set() });
     blind.timer = setInterval(() => { if (play.playingId) blind.heard.add(play.playingId); }, 250);
     earcon("dark");
-    setTimeout(() => speak("Blindfold on. I'm listening: tell me where you want to go, or say help.", { kind: "help", force: true }), 500);
+    blind.welcomeTimer = setTimeout(() => speak(MeriContext.greeting(), { kind: "help", force: true }), 500);
     blind.lastSig = "";
   } else {
     clearInterval(blind.timer);
     earcon("light");
-    showReport();
+    Speech.cancel();
+    speak("Meri is standing by. Say Hi Meri when you need me.", {kind:"short", force:true});
   }
 }
 onWalkerChange(() => {
@@ -158,7 +159,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "w" || e.key === "W") $("whereami").click();
   else if ((e.key === "r" || e.key === "R") && !rec.mr) $("rec").click();   // while recording, R stops (after_record_ui)
 }, true);
-$("blindBtn").addEventListener("click", () => setBlind(true));
+$("blindBtn").addEventListener("click", () => { if(voiceControl.status.active){setBlind(false);voiceControl.setActive(false);}else voiceControl.setActive(true); });
 
 function showReport() {
   const p = state.plan, secs = Math.round((performance.now() - blind.t0) / 1000);

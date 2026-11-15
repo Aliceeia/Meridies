@@ -15,3 +15,6 @@ connect/tests/out/
 connect/data/memories_archive/
 connect/data/settings.json
 connect/data/circles.json
+
+# Generated deployment snapshot (media and runtime data); rebuild from source.
+/web/

@@ -5,7 +5,7 @@ const assert = require("node:assert");
 // a fake speech engine: records what was spoken and cancelled
 const log = { spoken: [], cancels: 0 };
 globalThis.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
-globalThis.speechSynthesis = { speaking: false, getVoices: () => [], cancel() { log.cancels++; },
+globalThis.speechSynthesis = { speaking: false, getVoices: () => [{name:"Microsoft Zira", lang:"en-US"}], cancel() { log.cancels++; },
   speak(u) { log.spoken.push(u.text); this.last = u; } };
 const S = require("../frontend/speech.js");
 
@@ -59,4 +59,15 @@ test("a warning and a description are delivered differently", () => {
 test("errors never speak jargon", () => {
   const t = S.oops();
   assert.strictEqual(t, "I couldn't get that — try again.");
+});
+
+test("one female voice stays fixed across warnings, location and detail", () => {
+  const voice = S.pickVoice();
+  assert.ok(/Zira/.test(voice.name));
+  for (const kind of ["warning", "detail", "more", "help"]) {
+    S.say("A doorway is ahead.", {kind, force:true});
+    assert.strictEqual(speechSynthesis.last.voice, voice);
+    assert.strictEqual(speechSynthesis.last.pitch, 1);
+  }
+  S.cancel();
 });
