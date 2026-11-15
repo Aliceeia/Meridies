@@ -75,6 +75,8 @@ def main():
                               "(e.g. 'Jerry') — explicit, doesn't depend on the "
                               "system default, which a long-running stream won't "
                               "follow if it changes after startup anyway")
+    parser.add_argument("--swap-lr", action="store_true",
+                        help="swap left and right channels (earphones worn the other way round)")
     args = parser.parse_args()
 
     if args.list_devices:
@@ -93,6 +95,9 @@ def main():
 
     bank = SoundBank()
     mixer = Mixer(bank)
+    mixer.swap_lr = args.swap_lr
+    if args.swap_lr:
+        print("engine: left/right swapped")
     receiver = WarningReceiver(args.endpoint)
     receiver.start()
 

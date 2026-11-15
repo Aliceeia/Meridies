@@ -40,9 +40,10 @@ COLORS = {"urgent": "#d62728", "beep": "#ff7f0e", "hum": "#1f77b4", "silent": "#
 
 
 class Sim:
-    def __init__(self, device):
+    def __init__(self, device, swap_lr=False):
         self.bank = SoundBank()
         self.mixer = Mixer(self.bank)
+        self.mixer.swap_lr = swap_lr
         self.lock = threading.Lock()
         self.warnings = []
         self.muted = False
@@ -252,6 +253,7 @@ class Sim:
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--device", help="output device (substring); see engine.py --list-devices")
+    p.add_argument("--swap-lr", action="store_true", help="swap left and right channels (earphones worn the other way round)")
     a = p.parse_args()
     device = None
     if a.device:
@@ -261,7 +263,7 @@ def main():
             raise SystemExit(f"no output device matching '{a.device}'")
         device = m[0]
     print("loading tones + KEMAR HRTF...")
-    Sim(device).run()
+    Sim(device, swap_lr=a.swap_lr).run()
 
 
 if __name__ == "__main__":

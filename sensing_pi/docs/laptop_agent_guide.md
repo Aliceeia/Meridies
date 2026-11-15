@@ -42,6 +42,26 @@ pip install -r audio/requirements.txt -r voice_agent/requirements.txt matplotlib
 - **Linux:** `sounddevice` needs PortAudio: `sudo apt install libportaudio2`.
 - **macOS:** allow microphone access for the terminal, and allow incoming connections for Python if asked.
 
+## Easiest: one window for everything
+After steps 0 and 1 (and copying `voice_agent/.env` for Meri, step B.1), run this from the repo root:
+```bash
+python meridies_launcher.py
+```
+- **Mode:**
+  - **Spatial audio demo:** drag virtual obstacles and hear them (`audio/sim_view.py`).
+  - **Sensing (no camera):** the object map plus the sound engine, from the Pi's live stream.
+  - **Sensing + camera (Meri):** the same, plus the voice agent. Say "Hey Meri"; it uses the Pi camera.
+  - Switching modes stops the previous one.
+- **Earphones:**
+  - Pick the sound output, and Meri's microphone.
+  - **Swap left / right** if the earphones are worn the other way round.
+  - **Test left/right** plays a low tone in the left ear, then a high tone in the right.
+  - **Apply** restarts the current mode with the new settings.
+- **Other buttons:** Check Pi feeds, Open camera view. The log shows the output of every program it started.
+- **Settings** are remembered in `~/.meridies_launcher.json`.
+
+The steps below do the same things by hand.
+
 ## 2. Check the Pi feeds
 ```bash
 python sensing_pi/tools/feed_check.py --host 172.20.10.5 --raw --secs 6

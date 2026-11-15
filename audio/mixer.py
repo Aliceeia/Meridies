@@ -588,6 +588,7 @@ class Mixer:
             _kemar().match_level(sound_bank.beep_dry, self.sr)  # load now, not in the first callback
         self.slots = [VoiceSlot(i + 1) for i in range(NUM_SLOTS)]
         self.sample_counter = 0
+        self.swap_lr = False   # True: left channel goes to the right ear and vice versa (--swap-lr)
         self._last_order = []  # list of obstacle ids, slot-index order
 
     def update_warnings(self, warnings):
@@ -656,4 +657,6 @@ class Mixer:
         peak = np.max(np.abs(out))
         if peak > 0.98:
             out *= 0.98 / peak  # simple safety limiter across overlapping voices
+        if self.swap_lr:      # earphones worn the other way round
+            out = np.ascontiguousarray(out[:, ::-1])
         return out
