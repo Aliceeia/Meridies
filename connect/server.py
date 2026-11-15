@@ -347,18 +347,25 @@ name_of = lambda a: PEOPLE.get(a, a)  # noqa: E731
 TELL_ME_MORE_PROMPT = ("A blind person is standing here. These are their own notes left at this spot. Combine what you "
                        "see with what they recorded into three sentences. Do not state directions or distances — those "
                        "are supplied separately. Do not mention colours.")
+SPOKEN_STYLE = ("Speak like a friend who has been here before, telling them what matters. Put the most important thing "
+                "in the first four words. Never say 'I can see', 'it appears', 'there seems to be', 'in this image' or "
+                "'based on the scan'. Never apologise or mention being an AI. Short, plain sentences.")
 
 
 def audible(viewer: str, fam: str | None, bid: str) -> list[dict]:
     return [m for m in all_memories() if m["building_id"] == bid and can_see(m, viewer, fam)]
 
 
-def around_here(bid: str, x: float, y: float, heading, viewer: str, fam=None, floor: int = 0) -> dict:
+def around_here(bid: str, x: float, y: float, heading, viewer: str, fam=None, floor: int = 0, kind: str = "around",
+                prev: str = "") -> dict:
     from connect.backend import spatial
-    return spatial.around(desc.load_plan(bid), x, y, heading, audible(viewer, fam, bid), viewer, name_of, floor)
+    plan, mems = desc.load_plan(bid), audible(viewer, fam, bid)
+    if kind == "arrival":
+        return spatial.arrival(plan, x, y, heading, mems, viewer, name_of, floor, prev=prev)
+    return spatial.around(plan, x, y, heading, mems, viewer, name_of, floor)
 
 
-def tell_me_more(bid: str, x: float, y: float, heading, sweep, viewer: str) -> dict:
+def tell_me_more(bid: str, x: float, y: float, heading, sweep, viewer: str, with_bearings: bool = True) -> dict:
     """Context: the first-person render here, the transcripts of memories within 5 m, the resolved bearings.
     One Gemini call. Directions and distances come from the resolver, never from the model."""
     import time as _t
@@ -371,7 +378,7 @@ def tell_me_more(bid: str, x: float, y: float, heading, sweep, viewer: str) -> d
         image, what = desc.first_person(bid, sw, heading or 0.0), "what is in front of them at eye level, from a 3D scan"
     else:
         image, what = desc.splat_crop(plan, x, y), "the spot seen from above, from a drone scan"
-    lines = [TELL_ME_MORE_PROMPT, f"The image shows {what}."]
+    lines = [TELL_ME_MORE_PROMPT, SPOKEN_STYLE, f"The image shows {what}."]
     lines.append("Their notes:" if notes else "There are no notes here yet; describe only what you see.")
     for m in notes[:6]:
         who = "their own note" if m["author_id"] == viewer else f"a note a friend, {name_of(m['author_id'])}, shared with them"
@@ -380,7 +387,11 @@ def tell_me_more(bid: str, x: float, y: float, heading, sweep, viewer: str) -> d
     t0 = _t.monotonic()
     text = gemini.generate([{"text": "\n".join(lines)}, gemini.image_part(image)], timeout=20, retries=1)
     print(f"  tell-me-more: {gemini.last_model} {_t.monotonic() - t0:.1f}s, {len(notes)} notes", flush=True)
-    return {"bearings": res["bearings"], "text": text, "model": gemini.last_model, "notes": [m["id"] for m in notes]}
+    # up to six sentences in all: at most three measured ones (hazards first), then the model's three
+    # (skipped when the person just heard them at this spot: repeating is worse than silence)
+    bearings = spatial.clean(" ".join(res["hazard_lines"] + [res["memory_line"]]), max_sentences=3) if with_bearings else ""
+    return {"bearings": bearings, "text": spatial.clean(text, max_sentences=3), "model": gemini.last_model,
+            "notes": [m["id"] for m in notes]}
 
 
 def gallery(q: dict) -> dict:
@@ -546,7 +557,7 @@ class Handler(BaseHTTPRequestHandler):
             if bid not in desc.BUILDINGS:
                 return self.err(404, "unknown building")
             viewer, fam = who(q)
-            return self.send(200, around_here(bid, x, y, heading, viewer, fam, floor))
+            return self.send(200, around_here(bid, x, y, heading, viewer, fam, floor, q.get("kind", "around"), q.get("prev", "")))
         if parts == ["api", "circle"]:
             viewer = q.get("viewer", "")
             return self.send(200, {"members": circles().get(viewer, []) if viewer else [],
@@ -673,7 +684,8 @@ class Handler(BaseHTTPRequestHandler):
             if bid not in desc.BUILDINGS:
                 return self.err(404, "unknown building")
             try:
-                return self.send(200, tell_me_more(bid, x, y, heading, req.get("sweep"), req.get("viewer") or ""))
+                return self.send(200, tell_me_more(bid, x, y, heading, req.get("sweep"), req.get("viewer") or "",
+                                                   with_bearings=req.get("bearings", True) is not False))
             except LookupError as e:
                 return self.err(503, str(e))
             except urllib.error.HTTPError as e:

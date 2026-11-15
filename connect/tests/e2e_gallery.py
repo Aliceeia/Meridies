@@ -111,7 +111,9 @@ def main():
         page.screenshot(path=str(OUT / "gallery_detail.png"))
         page.keyboard.press("Escape")
         page.wait_for_selector("#detail:not([open])", state="attached")
-        assert page.evaluate("document.activeElement.classList.contains('excerpt')"), "focus did not return to the memory"
+        page.wait_for_timeout(300)
+        assert page.evaluate("document.activeElement.classList.contains('excerpt')"), \
+            f"focus did not return to the memory: {page.evaluate('document.activeElement.outerHTML.slice(0, 120)')}"
 
         # ---- MeriCircle: put User B in the circle -> "Shared with me" for User B shows only family
         page.click("#profileBtn")
@@ -187,10 +189,12 @@ def main():
         page.keyboard.press("Shift"); page.wait_for_timeout(300)
         before = len(AI_CALLS)
         page.keyboard.press("w")
-        page.wait_for_function("document.getElementById('whereText').textContent.includes('Chandelier')", timeout=5000)
+        page.wait_for_function("document.getElementById('whereText').textContent.toLowerCase().includes('chandelier')", timeout=5000)
         said = page.inner_text("#whereText")
         print("W at the chandelier:", said[:200])
-        assert "Chandelier, one metre six" in said and "You left a note here" in said and len(AI_CALLS) == before
+        low = said.lower()
+        assert "chandelier" in low and "one metre six" in low and "careful, the chandelier here hangs low" in low
+        assert len(AI_CALLS) == before
         page.keyboard.press("m")
         page.wait_for_function("document.getElementById('tellText').textContent.includes('Three sentences')", timeout=20000)
         assert len(AI_CALLS) == before + 1 and "Careful, the chandelier" in AI_CALLS[-1][0]["text"]
@@ -209,27 +213,37 @@ def main():
 
 
 def listen(page, base):
-    page.add_init_script("""window.__said = [];
-      speechSynthesis.speak = (u) => { window.__said.push(u.text); };""")
+    page.add_init_script("""window.__said = []; window.__cancels = 0;
+      speechSynthesis.speak = (u) => { window.__said.push(u.text); };
+      const c = speechSynthesis.cancel.bind(speechSynthesis);
+      speechSynthesis.cancel = () => { window.__cancels++; c(); };""")
     page.goto(base + "/")
     page.wait_for_selector(".entry")
     said = lambda: page.evaluate("window.__said.slice(-1)[0] || ''")  # noqa: E731
     page.keyboard.press("l"); page.wait_for_timeout(300)
     assert page.locator("#listen").is_visible() and page.get_attribute("#listenBtn", "aria-pressed") == "true"
-    print("  L    ->", said()[:80])
-    assert "Place 1 of 3" in said()
+    print("  L    ->", said()[:100])
+    assert "1 of 3" in said()
+    first4 = " ".join(said().split()[:4])
+    assert any(p in first4 for p in page.evaluate("gallery.G.places.map(p => p.name.split(' ')[0])")), "place name not front-loaded"
     seen = {}
     for _ in range(3):
         n = said().split(". ")[1] if said().startswith("Place") else ""
         seen[n] = page.evaluate("gallery.G.places[gallery.G.placeIdx].memory_count")
         page.keyboard.press("ArrowRight"); page.wait_for_timeout(200)
     print("  → ×3 ->", said()[:60])
-    assert "last place" in said().lower()
+    assert "last" in said().lower() and len(said().split()) <= 4         # an edge: a few words, not the line again
     while page.evaluate("gallery.G.places[gallery.G.placeIdx].memory_count") < 2:
         page.keyboard.press("ArrowLeft"); page.wait_for_timeout(150)
     page.keyboard.press("ArrowDown"); page.wait_for_timeout(200)
-    print("  ↓    ->", said()[:80])
-    assert "Memory 2 of 2" in said()
+    print("  ↓    ->", said()[:90])
+    assert "“" in " ".join(said().split()[:4]) or "“" in said()[:40], "what was said should come first"
+    # INTERRUPTIBLE: any key cuts speech off at once
+    page.keyboard.press("h"); page.wait_for_timeout(100)
+    n = page.evaluate("window.__cancels")
+    page.keyboard.press("Shift"); page.wait_for_timeout(50)
+    assert page.evaluate("window.__cancels") > n, "a key did not cancel speech"
+    print("  key during help -> speech cancelled")
     page.keyboard.press("Space"); page.wait_for_timeout(900)
     assert page.evaluate("!!gallery.G.audio")
     n0 = len(AI_CALLS)
@@ -245,9 +259,12 @@ def listen(page, base):
     urllib.request.urlopen(req)
     page.wait_for_timeout(500)
     print("  hat → ->", said()[:60])
-    assert said().startswith("Place") or "last place" in said().lower()
+    assert "of 3" in said() or "last" in said().lower()
     page.keyboard.press("x"); page.wait_for_timeout(150)
-    assert said() == "Press H for help."
+    assert said() == "H for help."
+    for s in page.evaluate("window.__said"):
+        for bad in ["sorry", "loading", "looking closer", "this takes", "i can see", "it appears"]:
+            assert bad not in s.lower(), (bad, s)
     page.keyboard.press("Escape"); page.wait_for_timeout(200)
     assert page.locator("#listen").is_hidden() and page.get_attribute("#listenBtn", "aria-pressed") == "false"
     page.keyboard.press("l"); page.wait_for_timeout(200)

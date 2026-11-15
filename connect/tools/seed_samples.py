@@ -207,8 +207,22 @@ def create():
     print(f"{len(SAMPLES)} samples ready, {len(gone)} removed; circles: {FRIENDS_SHARE_WITH}")
 
 
+def redescribe():
+    """Write the samples' descriptions again with the current prompt (one Gemini call each)."""
+    for *_, key, _vis, _days, _text in [(s[0], s[1], s[2], s[3], s[4], s[5], s[6]) for s in SAMPLES]:
+        m = srv.load(sample_id(key))
+        try:
+            d = srv.desc.describe(m, srv.MEM)
+            srv.update(m["id"], lambda m: m.__setitem__("description", d))
+            print(f"{key:14} {d['text']}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"{key:14} FAILED {e!r}"[:200], flush=True)
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["remove"]:
         print(f"removed {remove()} sample memories")
+    elif sys.argv[1:] == ["redescribe"]:
+        redescribe()
     else:
         create()

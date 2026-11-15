@@ -55,6 +55,7 @@ def main():
         b = pw.chromium.launch(channel="chrome", headless=True, args=[
             "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"])
         ctx = b.new_context(viewport={"width": 1100, "height": 900}, permissions=["microphone", "camera"])
+        ctx.add_init_script("window.__said = []; speechSynthesis.speak = (u) => window.__said.push(u.text);")
         page = ctx.new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -70,6 +71,13 @@ def main():
         page.wait_for_function("document.getElementById('state').textContent === 'Careful'", timeout=5000)
         print("board:", page.inner_text("#state"), "|", page.inner_text("#stateLine"))
         assert "ahead-left" in page.inner_text("#stateLine")
+        page.wait_for_timeout(300)
+        spoken = page.evaluate("window.__said.slice(-1)[0] || ''")
+        print("warning spoken:", spoken)
+        assert spoken in ("Careful, ahead left.", "Something ahead left.") and len(spoken.split()) <= 4   # one clause, < 2 s
+        n_said = page.evaluate("window.__said.length")
+        page.wait_for_timeout(600)
+        assert page.evaluate("window.__said.length") == n_said, "a warning must be said once, not every frame"
         page.screenshot(path=str(OUT / "live_warning.png"))
         warnings["now"] = []
         page.wait_for_function("document.getElementById('state').textContent === 'Clear'", timeout=5000)
@@ -106,16 +114,18 @@ def main():
         warnings["now"] = [{"id": "S1", "az": 5, "dist": 0.4, "level": "urgent"}]
         page.wait_for_function("!document.getElementById('rec').classList.contains('recording')", timeout=3000)
         warnings["now"] = []
-        page.wait_for_function("document.getElementById('chipQueue').textContent === 'Nothing waiting to upload'", timeout=10000)
-        drafts = [json.loads(f.read_text()) for f in tmp.glob("*.json") if srv.ID_RE.match(f.stem)]
-        drafts = [d for d in drafts if d.get("draft")]
+        # wait for the draft itself (the queue label already read "nothing waiting" before the take was saved)
+        drafts, t_end = [], time.time() + 15
+        while not drafts and time.time() < t_end:
+            page.wait_for_timeout(300)
+            drafts = [d for d in (json.loads(f.read_text()) for f in tmp.glob("*.json") if srv.ID_RE.match(f.stem)) if d.get("draft")]
         print("warning mid-recording:", page.inner_text("#recLine"), "| drafts:", len(drafts))
         assert len(drafts) == 1 and drafts[0]["visibility"] == "private"
 
         # ---- C "what's around me": instant, no AI. M "tell me more": exactly one AI call
         page.wait_for_function("document.getElementById('state').textContent === 'Clear'", timeout=5000)
         page.keyboard.press("c")
-        page.wait_for_function("document.getElementById('ctxLine').textContent.includes(\"You're in the\")", timeout=5000)
+        page.wait_for_function("(t => t && t !== '…')(document.getElementById('ctxLine').textContent)", timeout=5000)
         print("C (no AI):", page.inner_text("#ctxLine")[:110], "| AI calls:", len(ai_calls))
         assert ai_calls == []
         page.keyboard.press("m")

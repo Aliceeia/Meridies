@@ -17,14 +17,11 @@ function pickVoice() {
 }
 speechSynthesis.onvoiceschanged = pickVoice;
 pickVoice();
-speak = function (text, { interrupt = true } = {}) {      // eslint-disable-line no-func-assign
+// Every utterance goes through Speech (speech.js): interruptible, length-capped, no filler, no repeats.
+Speech.muted = () => state.hatWarning;                 // an obstacle warning outranks every spoken word
+speak = function (text, { kind = "any", force = false } = {}) {   // eslint-disable-line no-func-assign
   if (state.hatWarning) return earcon("muted");
-  if (interrupt) speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";                     // never let a Chinese system voice read English text
-  if (voice || pickVoice()) u.voice = voice;
-  u.rate = 0.92; u.pitch = 1.08; u.volume = 0.9;
-  speechSynthesis.speak(u);
+  return Speech.say(text, { kind, force });
 };
 
 // ---------- earcons: every action answers with its own short sound ----------
@@ -43,6 +40,7 @@ const EARCONS = {
 function earcon(name) {
   try { audio.ctx(); for (const [f, dur, g, when] of EARCONS[name] || []) audio.tone(f, dur, g, when); } catch (_) {}
 }
+Speech.tone = () => earcon("error");
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b && !["rec", "recStop", "listen", "whereami"].includes(b.id)) earcon("tap");   // those have their own sounds
@@ -51,7 +49,7 @@ const _toast = toast;
 toast = function (msg, ms) {                               // eslint-disable-line no-func-assign
   _toast(msg, ms);
   earcon("bump");
-  if (blind.on) speak(msg);
+  if (blind.on) speak(msg, { kind: "short" });
 };
 let lastSweep = null;
 onWalkerChange(() => {
@@ -64,25 +62,24 @@ document.addEventListener("memory-saved", (e) => {
 });
 
 // ---------- speak, don't show ----------
-// While Gemini thinks, say so once and keep a soft heartbeat going, so silence never means "broken".
+// Waiting is a tone, never words: a soft heartbeat, so silence never means "broken".
 let thinking = null;
 function startThinking() {
   stopThinking();
-  speak("Looking around. This takes a few seconds.");
   thinking = setInterval(() => audio.tone(740, 0.05, 0.035), 1600);
+  audio.tone(740, 0.05, 0.035);
 }
 function stopThinking() { clearInterval(thinking); thinking = null; }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b && /Describe/.test(b.textContent)) startThinking();
 }, true);
-document.addEventListener("described", (e) => { stopThinking(); earcon("ready"); setTimeout(() => speak(e.detail.description.text), 450); });
-document.addEventListener("describe-failed", (e) => { stopThinking(); earcon("error"); speak(e.detail); _toast(e.detail, 6000); });
+document.addEventListener("described", (e) => { stopThinking(); earcon("ready"); setTimeout(() => speak(e.detail.description.text, { kind: "detail" }), 450); });
+document.addEventListener("describe-failed", () => { stopThinking(); Speech.oops(); _toast("Couldn't describe this place — try again", 4000); });
 
-// Listen must always answer: if a recording can't be played, say so instead of staying silent.
+// Listen must always answer: if a recording can't be played, say so, plainly.
 window.addEventListener("unhandledrejection", (e) => {
-  earcon("error");
-  speak("Sorry, I couldn't play that memory.");
+  Speech.oops();
   console.warn("playback failed:", e.reason);
 });
 $("listen").addEventListener("click", () => audio.tone(880, 0.04, 0.06), true);   // the press registered
@@ -131,7 +128,8 @@ function setBlind(on) {
     Object.assign(blind, { t0: performance.now(), reached: new Set(), heard: new Set() });
     blind.timer = setInterval(() => { if (play.playingId) blind.heard.add(play.playingId); }, 250);
     earcon("dark");
-    setTimeout(() => speak("Blindfold on. Arrows to walk. Enter to listen. W, where am I. R, record. Space to see again."), 500);
+    setTimeout(() => speak("Blindfold on. Arrows walk, W tells you where you are, Enter plays, M looks closer, Space to see again.", { kind: "help", force: true }), 500);
+    blind.lastSig = "";
   } else {
     clearInterval(blind.timer);
     earcon("light");
@@ -152,7 +150,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     if (rec.mr || window.afterRecordBusy) return;      // Enter belongs to the recording flow right now
     e.preventDefault();
-    if (play.near) playVoice(memById(play.near)); else { earcon("nothing"); speak("Nothing to listen to here."); }
+    if (play.near) playVoice(memById(play.near)); else { earcon("nothing"); speak("Nothing here to play.", { kind: "short" }); }
   } else if (e.key === "w" || e.key === "W") $("whereami").click();
   else if ((e.key === "r" || e.key === "R") && !rec.mr) $("rec").click();   // while recording, R stops (after_record_ui)
 }, true);
@@ -184,6 +182,6 @@ function showReport() {
   const line = `${secs} seconds without sight. You found ${found} of ${total} ${total === 1 ? "memory" : "memories"} by sound${heard ? `, and listened to ${heard}` : ""}.`;
   $("reportLine").textContent = line;
   $("report").hidden = false;
-  setTimeout(() => speak(line), 600);
+  setTimeout(() => speak(line, { kind: "short", force: true }), 600);
 }
 $("reportClose").addEventListener("click", () => ($("report").hidden = true));

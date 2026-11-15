@@ -30,16 +30,18 @@ AERIAL_HALF, SPLAT_HALF, PLAN_HALF = 15.0, 12.0, 8.0
 PROMPT_INTERIOR = (
     "The first image is what a blind person would be facing at eye level while standing at this spot. "
     "The other two are overhead views of the same building for layout context.\n\n"
-    "Describe this place in two sentences for someone who cannot see it. Lead with what is directly ahead "
-    "of them and roughly how far away it is, in steps or arm's lengths. Then describe what is on their left, "
-    "on their right and behind them, relative to their own body. Never use compass directions (north, south, "
-    "east, west): a blind person orients by their body, not by the map. "
+    "Describe this place in two sentences for someone who cannot see it, the way a friend who knows the room "
+    "would. Start each sentence with the thing itself, not its direction: 'A closed door, about six steps ahead.' "
+    "Then what is on their left, on their right and behind them, relative to their own body. Distances in steps, "
+    "rounded ('about six steps'), never metres, never degrees, never compass directions (north, south, east, west). "
     "Mention what they could hear, touch, or walk to, and anything at head height they should know about. "
+    "Never say 'I can see', 'it appears', 'there seems to be', 'in this image' or 'based on the scan'. "
     "Do not mention colours or anything that is purely visual. Answer in English.")
-PROMPT_YARD = ("This is imagery of a location a blind person is standing at. Describe it in two sentences, "
-               "focusing on what they could hear, touch, or walk to. Never use compass directions (north, south, "
-               "east, west); say ahead, left, right or behind. Do not describe colours or anything purely visual. "
-               "Answer in English.")
+PROMPT_YARD = ("This is imagery of a location a blind person is standing at. Describe it in two sentences, the way a "
+               "friend who knows the place would, starting each sentence with the thing itself. Focus on what they "
+               "could hear, touch, or walk to. Distances in steps, rounded; never metres, degrees or compass directions; "
+               "say ahead, left, right or behind. Never say 'I can see', 'it appears', 'in this image'. "
+               "Do not describe colours or anything purely visual. Answer in English.")
 
 
 def load_plan(bid: str) -> dict:
@@ -211,6 +213,7 @@ def describe(m: dict, mem_dir: Path) -> dict:
     s = _t.monotonic()
     text = gemini.generate(parts, timeout=25, retries=1)   # don't wait on an overloaded model: move to the next
     print(f"  describe {m['id'][:8]}: gemini ({gemini.last_model}) {_t.monotonic() - s:.1f}s, total {_t.monotonic() - t0:.1f}s", flush=True)
-    return dict(text=text, model=gemini.last_model or gemini.model_name(), lat=round(lat, 7), lon=round(lon, 7),
+    from .spatial import clean
+    return dict(text=clean(text, max_sentences=3), model=gemini.last_model or gemini.model_name(), lat=round(lat, 7), lon=round(lon, 7),
                 created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 images=[dict(kind=k, label=lbl) for k, lbl, _, _ in images], **extra)

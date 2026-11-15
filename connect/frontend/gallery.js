@@ -243,7 +243,7 @@ async function togglePlay(m) {
   if (G.playingId === m.id) { stopMemory(); announce("Paused."); return; }
   const p = placeOf(m);
   const ok = await playMemory(m, { onend: () => announce("Finished.") });
-  announce(ok ? `Playing the memory from ${p.name}.` : "Sorry, this memory couldn't be played.");
+  announce(ok ? `${p.name}, playing.` : "I couldn't get that — try again.");
 }
 
 // "Tell me more": the one live AI call, at the spot where this memory was left. Explicit requests only.
@@ -280,15 +280,17 @@ function openDetail(m, opener) {
     m.is_sample && G.mode === "author" ? "Sample memory: scripted, read by a computer voice." : ""].filter(Boolean).join(" ");
   $("dMore").hidden = true; $("dMoreText").textContent = "";
   const more = el("button", { class: "btn", onclick: async () => {
-    more.disabled = true; more.textContent = "Looking closer…";
-    $("dMore").hidden = false; $("dMoreText").textContent = "Looking closer. This takes a few seconds.";
+    more.disabled = true; more.textContent = "…";
+    $("dMore").hidden = false; $("dMoreText").textContent = "…";
     try {
       const r = await tellMeMore(m);
-      $("dMoreText").textContent = `${r.bearings} ${r.text}`;
-      announce(`${r.bearings} ${r.text}`);
+      const text = Speech.shape(`${r.bearings} ${r.text}`, "more");
+      $("dMoreText").textContent = text;
+      announce(text);
     } catch (e) {
-      $("dMoreText").textContent = `Couldn't look closer right now. ${e.message}`;
-      announce("Couldn't look closer right now.");
+      console.warn("tell me more:", e.message);
+      $("dMoreText").textContent = "I couldn't get that — try again.";
+      announce("I couldn't get that — try again.");
     }
     more.disabled = false; more.textContent = "Tell me more";
   } }, "Tell me more");
@@ -435,7 +437,7 @@ async function samplesSwitch(set) {
   if (set !== undefined) {
     if (set && !s.real) {   // never leave the gallery empty in front of someone
       $("samplesBtn").lastChild.textContent = "record a real one first";
-      announce("There are no real recordings yet, so the samples stay, to keep the gallery from being empty.");
+      announce("Samples stay until there's a real recording.");
       return;
     }
     await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -459,5 +461,5 @@ if (FAMILY) {
   renderAccounts(); refreshCircle(); samplesSwitch();
 }
 window.gallery = { G, load, render, playMemory, stopMemory, takeMeThere, visOf, transcriptLine, dateHuman, plural, auth, withAuth,
-                   openDetail, memById, tellMeMore };
+                   openDetail, memById, tellMeMore, nameOf };
 load();

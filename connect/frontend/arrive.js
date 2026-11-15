@@ -44,7 +44,10 @@
     play.near = m.id; play.armed.add(m.id);
     chime(m);
     updateNearUI();
-    setTimeout(() => speak(`Here. The memory is ${describeDir(relative(m))}. Enter to listen. G for the gallery.`), 900);
+    const where = describeDir(relative(m));
+    setTimeout(() => speak(Speech.vary("arrive", [`The memory's ${where}. Enter plays it.`,
+                                                    `${where.charAt(0).toUpperCase() + where.slice(1)}: the memory. Enter plays it.`,
+                                                    `It's ${where}. Enter to hear it.`]), { kind: "short", force: true }), 900);
   }
 
   const _load = loadBuilding;

@@ -41,9 +41,11 @@ def test_hazard_links_only_memories_within_one_metre():
                transcript=dict(text="Something else."))
     assert [m["id"] for m in spatial.hazard_notes(CHANDELIER, [far, near])] == ["a"]
     # standing 1.4 m from it, facing it: "Chandelier, one metre six, two steps ahead. You left a note here ...: '...'."
-    line = spatial.hazard_line(CHANDELIER, hx, hy - 1.4, 0.0, [near, far], "me", lambda a: a)
-    assert line.startswith("Chandelier, one metre six, two steps ahead.")
-    assert "You left a note here" in line and "'Careful with this one'" in line and "Something else" not in line
+    for _ in range(6):                       # every phrasing: the hazard first, its height, where, then the note
+        line = spatial.hazard_line(CHANDELIER, hx, hy - 1.4, 0.0, [near, far], "me", lambda a: a)
+        assert "chandelier" in " ".join(line.lower().split()[:3]), line
+        assert "one metre six" in line and "two steps ahead" in line, line
+        assert "'Careful with this one'" in line and "Something else" not in line, line
 
 
 @pytest.fixture()
@@ -87,11 +89,12 @@ def test_around_is_instant_and_never_calls_gemini(api):
     code, r = call("GET", f"/api/around?viewer=user-a&building={BID}&x={hx}&y={hy - 1.4}&heading=0")
     assert code == 200 and calls == []
     print(r["bearings"])
-    assert "Chandelier, one metre six" in r["bearings"] and "You left a note here" in r["bearings"]
+    low = r["bearings"].lower()
+    assert "chandelier" in " ".join(low.split()[:4]) and "one metre six" in low and "careful, the chandelier here hangs low" in low
     assert r["description"] == "Cached: Careful, the chandelier here hangs low."
     # someone else can't hear it, so it isn't linked or counted for them
     other = call("GET", f"/api/around?viewer=user-b&building={BID}&x={hx}&y={hy - 1.4}&heading=0")[1]
-    assert "left a note" not in other["bearings"] and other["description"] is None
+    assert "hangs low" not in other["bearings"] and other["description"] is None
 
 
 def test_tell_me_more_is_one_call_with_render_notes_and_bearings(api):
@@ -106,6 +109,6 @@ def test_tell_me_more_is_one_call_with_render_notes_and_bearings(api):
     assert srv.TELL_ME_MORE_PROMPT in text and "Do not state directions or distances" in text
     assert "Careful, the chandelier" in text and "Far away" not in text and "private note" not in text
     assert calls[0][1]["inline_data"]["mime_type"] == "image/jpeg"
-    assert "Chandelier, one metre six" in r["bearings"]
+    assert "chandelier" in r["bearings"].lower() and "one metre six" in r["bearings"].lower()
     # a family link can't ask
     assert call("POST", "/api/tell-me-more?family=x", {"building": BID, "x": 0, "y": 0})[0] == 403

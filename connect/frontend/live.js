@@ -33,14 +33,16 @@ function tone(f, dur, g = 0.15, when = 0) {
     o.connect(a).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
   } catch (_) {}
 }
-function say(text) {
-  if (L.warning) return;
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-US"; u.rate = 0.98;
-    speechSynthesis.speak(u);
-  } catch (_) {}
+// Every word goes through Speech (speech.js): interruptible, capped, no filler, no repeats. A warning mutes the rest.
+Speech.muted = () => L.warning;
+Speech.tone = () => tone(233, 0.2);
+const say = (text, opts = {}) => Speech.say(text, { kind: "short", ...opts });
+// a live hat warning: one clause, under two seconds, said once per new obstacle
+function warnClause(w) {
+  const a = Math.abs(w.az || 0), s = (w.az || 0) < 0 ? "left" : "right";
+  const dir = a < 20 ? "ahead" : a < 60 ? `ahead ${s}` : a < 110 ? s : "behind";
+  return w.level === "urgent" ? Speech.vary("warn.urgent", [`Stop, ${dir}.`, `Stop — ${dir}.`])
+                              : Speech.vary("warn", [`Careful, ${dir}.`, `Something ${dir}.`]);
 }
 const isoNow = () => new Date().toISOString();
 
@@ -217,40 +219,43 @@ async function aroundMe() {
   try {
     const q = new URLSearchParams({ viewer: L.user, building: $("building").value, x: spot.x.toFixed(2), y: spot.y.toFixed(2) });
     const r = await (await fetch(`/api/around?${q}`)).json();
-    const text = [r.bearings, r.description ? `Here: ${r.description}` : ""].filter(Boolean).join(" ");
+    const text = Speech.shape([r.bearings, r.description].filter(Boolean).join(" "), "detail");
     $("ctxLine").textContent = text;
-    tone(659, 0.06); say(text);
+    tone(659, 0.06); say(text, { kind: "detail", force: true });
+    heardAround = { at: Date.now(), key: `${$("building").value}:${spot.label}` };
   } catch (_) {
-    const msg = `You're at ${spot.label}. The gallery isn't reachable, so that's all I know offline.`;
+    const msg = `${spot.label}. That's all I have offline.`;      // the chosen spot is known even with no network
     $("ctxLine").textContent = msg;
-    tone(233, 0.2); say(msg);
+    tone(233, 0.2); say(msg, { force: true });
   }
 }
+let heardAround = null;           // M right after C at the same spot: don't repeat the bearings
 // M, "tell me more": the ONE live AI call, only when asked. Takes a few seconds.
 $("more").onclick = tellMore;
 async function tellMore() {
   if (L.warning) return;
   const spot = currentSpot();
   if (!spot) return say("Choose where you are first.");
-  $("ctxLine").textContent = "Looking closer…";
-  say("Looking closer. This takes a few seconds.");
-  const beat = setInterval(() => tone(740, 0.05, 0.04), 1400);
+  $("ctxLine").textContent = "…";
+  Speech.cancel();
+  const beat = setInterval(() => tone(740, 0.05, 0.04), 1400);         // waiting is a tone, never words
+  tone(740, 0.05, 0.04);
   try {
     const ctl = new AbortController();
     const to = setTimeout(() => ctl.abort(), 25000);
     const r = await fetch("/api/tell-me-more", { method: "POST", headers: { "Content-Type": "application/json" }, signal: ctl.signal,
-      body: JSON.stringify({ viewer: L.user, building: $("building").value, x: spot.x, y: spot.y, heading: null, sweep: spot.sweep ?? null }) });
+      body: JSON.stringify({ viewer: L.user, building: $("building").value, x: spot.x, y: spot.y, heading: null, sweep: spot.sweep ?? null,
+                             bearings: !(heardAround && Date.now() - heardAround.at < 60000 && heardAround.key === `${$("building").value}:${spot.label}`) }) });
     clearTimeout(to);
     const body = await r.json();
     if (!r.ok) throw new Error(body.error);
-    const text = `${body.bearings} ${body.text}`;
+    const text = Speech.shape([body.bearings, body.text].filter(Boolean).join(" "), "more");
     $("ctxLine").textContent = text;
-    tone(659, 0.08); say(text);
+    tone(659, 0.08); say(text, { kind: "more", force: true });
   } catch (e) {
-    const offline = !navigator.onLine || e.name === "TypeError" || e.name === "AbortError";
-    const msg = offline ? "No connection, so I can't look closer right now. C still works." : "I couldn't look closer right now.";
-    $("ctxLine").textContent = msg;
-    tone(233, 0.2); say(msg);
+    console.warn("tell me more:", e.message);
+    $("ctxLine").textContent = "I couldn't get that — try again.";
+    Speech.oops();
   } finally {
     clearInterval(beat);
   }
@@ -356,7 +361,10 @@ function showWarnings(ws, connected) {
   $("chipHat").textContent = connected ? "Hat connected" : "No hat data";
   $("chipHat").className = `chip ${connected ? "on" : "off"}`;
   drawRadar(ws);
-  setWarning();
+  setWarning();                                                  // cuts any other speech first
+  const key = top ? `${top.id}:${top.level}` : "";
+  if (key && key !== showWarnings.last) Speech.say(warnClause(top), { kind: "warning", force: true });   // once per obstacle
+  showWarnings.last = key;
 }
 $("demoWarn").onchange = (e) => { L.demoWarning = e.target.checked; showWarnings([], false); };
 function connectStream() {

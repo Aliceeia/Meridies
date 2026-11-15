@@ -163,44 +163,65 @@ function whereAmI() {
 }
 // "What's around me" is instant: the room and doorways from the plan (above), hazards with any note left at
 // them, nearby memories and the cached description from the server's spatial resolver. No AI on this path.
-async function aroundMe() {
+async function aroundMe(kind = "around", prev = "") {
   const w = state.walker, s = sweepAt(w.sweep);
-  const local = whereAmI().split(/(?<=\.)\s+/).filter((p) => !/^(Mind your head|No memories|A memory is|\d+ memories)/.test(p));
-  try {
-    const q = new URLSearchParams({ viewer: state.user, building: state.plan.building.id, x: w.x.toFixed(2), y: w.y.toFixed(2),
-                                    heading: w.heading.toFixed(0), floor: (s && s.floor) || 0 });
-    const r = await (await fetch(`/api/around?${q}`)).json();
-    return [...local, ...r.hazard_lines, r.memory_line, r.description ? `Here: ${r.description}` : ""].filter(Boolean).join(" ");
-  } catch (_) {
-    return whereAmI();                       // server unreachable: the local version still answers
-  }
+  const q = new URLSearchParams({ viewer: state.user, building: state.plan.building.id, x: w.x.toFixed(2), y: w.y.toFixed(2),
+                                  heading: w.heading.toFixed(0), floor: (s && s.floor) || 0, kind, prev });
+  return (await fetch(`/api/around?${q}`)).json();
 }
 $("whereami").addEventListener("click", async () => {
-  const text = await aroundMe();
+  let text;
+  try {
+    const r = await aroundMe();
+    text = [r.bearings, r.description].filter(Boolean).join(" ");
+  } catch (_) {
+    text = whereAmI();                       // server unreachable: the local version still answers
+  }
   $("whereText").textContent = text;
-  speak(text);
+  speak(text, { kind: "detail", force: true });   // asked for: always answers, up to 30 s
+  heardAround = { at: Date.now(), key: `${state.walker.sweep}:${Math.round(state.walker.heading)}` };
+});
+let heardAround = null;                           // M right after W at the same spot: don't repeat the bearings
+
+// Arriving somewhere (blindfolded): say only what changed — a hazard newly ahead, a new room, a memory newly in
+// range — and nothing at all when nothing did. Instant, no AI.
+let arrivalSig = "", arrivalBusy = false;
+onWalkerChange(async () => {
+  if (typeof blind === "undefined" || !blind.on || state.target || !isInterior() || arrivalBusy) return;
+  const key = `${state.walker.sweep}`;
+  if (key === onWalkerChange._lastSweep) return;
+  onWalkerChange._lastSweep = key;
+  arrivalBusy = true;
+  try {
+    const r = await aroundMe("arrival", arrivalSig);
+    arrivalSig = r.sig;
+    if (r.text) speak(r.text, { kind: "arrival" });
+  } catch (_) { /* offline: the chimes still guide */ }
+  arrivalBusy = false;
 });
 
 // "Tell me more": the ONE live AI call, only when asked (button or M). Directions come from the resolver, the
 // three sentences from Gemini (the render here + the notes within 5 m).
 async function tellMeMore() {
   const w = state.walker;
-  $("tellText").textContent = "Looking closer…";
-  if (typeof startThinking === "function") startThinking();
+  $("tellText").textContent = "…";
+  if (typeof startThinking === "function") startThinking();           // a heartbeat tone, not words
   try {
     const r = await fetch("/api/tell-me-more", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ viewer: state.user, building: state.plan.building.id, x: w.x, y: w.y, heading: w.heading,
-                             sweep: w.sweep }) });
+                             sweep: w.sweep, bearings: !(heardAround && Date.now() - heardAround.at < 60000
+                                                         && heardAround.key === `${w.sweep}:${Math.round(w.heading)}`) }) });
     const body = await r.json();
     if (!r.ok) throw new Error(body.error);
-    const text = `${body.bearings} ${body.text}`;
+    const text = [body.bearings, body.text].filter(Boolean).join(" ");
     $("tellText").textContent = text;
     if (typeof stopThinking === "function") stopThinking();
-    speak(text);
+    speak(text, { kind: "more", force: true });
   } catch (e) {
     if (typeof stopThinking === "function") stopThinking();
-    $("tellText").textContent = `Couldn't look closer right now: ${e.message}`;
-    speak("I couldn't look closer right now. Where am I still works.");
+    console.warn("tell me more:", e.message);
+    $("tellText").textContent = "Couldn't get that — try again.";
+    Speech.oops();
   }
 }
 $("tellmore").addEventListener("click", tellMeMore);

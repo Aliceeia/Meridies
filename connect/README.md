@@ -27,6 +27,24 @@ Sample memories (`tools/seed_samples.py`, `is_sample: true`): your own in the Pr
 room, and ones shared with you by two blind friends, Maya and Theo (you're in their circles). Voices are Microsoft
 neural voices via `edge-tts` (seed tool only; `uv pip install edge-tts`), one voice per person.
 
+### Spoken output (acceptance criteria: `tests/test_speech.py`, `tests/speech.test.js`)
+
+Every page speaks through `frontend/speech.js`; the server's templates live in `backend/spatial.py`.
+
+- **Interruptible:** any key, tap or hat button cancels speech at once (capture phase, before the action runs).
+- **Length:** arrival ≤ 4 sentences and < 20 s; hat warning one clause < 2 s; tell me more ≤ 6 sentences; nothing
+  over 30 s unasked.
+- **Front-loaded, no filler:** the point in the first four words (hazards first). "I can see", "it appears", "in this
+  image", apologies, AI talk and system narration are stripped from templates and model text alike. Waiting is a tone.
+- **Numbers:** steps, rounded ("about six steps"); metres only for a hazard's height; never degrees.
+- **Silence:** arrivals say only what changed (a new hazard ahead, a new room, a memory newly in range), nothing
+  otherwise; words heard in full in the last 20 s aren't repeated; edges answer with a tone and a few words; M right
+  after W/C at the same spot skips the bearings it just said.
+- **Varied:** every template has several forms and never uses the same one twice in a row.
+- **Errors:** "I couldn't get that — try again." and a tone. Nothing more.
+
+`pytest -s connect/tests/test_speech.py` prints ten consecutive arrivals through the La Mirada scan to read aloud.
+
 ### Gallery rules (enforced by the server, tested in `tests/test_gallery_server.py`)
 
 - `visibility`: `private` (default) | `family` | `community`. Only the author changes it. `community` is only ever a

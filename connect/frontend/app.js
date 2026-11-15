@@ -177,7 +177,7 @@ map.addEventListener("click", (e) => {
       const d = Math.hypot(s.position.x - p.x, s.position.y - p.y);
       return d < b.d ? { s, d } : b;
     }, { s: null, d: 1e9 });
-    return s.d < 0.8 ? goToSweep(s.s.index) : toast("Click a highlighted sweep");
+    return s.d < 0.8 ? goToSweep(s.s.index) : toast("Pick a highlighted spot");
   }
   if (!walkable(p.x, p.y)) return toast("Not walkable there");
   state.target = p;
@@ -188,7 +188,7 @@ function goToSweep(i, keepHeading = false) {
   if (typeof rec !== "undefined" && rec.mr) return toast("Recording — stay put");
   const cur = sweepAt(state.walker.sweep);
   if (i === state.walker.sweep || state.target) return;
-  if (cur && !cur.neighbours.includes(i)) return toast("Not reachable in one step — pick a highlighted sweep");
+  if (cur && !cur.neighbours.includes(i)) return toast("Too far for one step — pick a highlighted spot");
   const s = sweepAt(i);
   state.target = { x: s.position.x, y: s.position.y, sweep: i, keepHeading };
 }
@@ -217,13 +217,13 @@ document.addEventListener("keydown", (e) => {
     if (state.target) return;
     const back = e.key === "ArrowDown";
     const i = neighbourToward(back ? norm360(w.heading + 180) : w.heading);
-    if (i == null) return toast(back ? "Nothing behind you to step back to" : "No sweep ahead — turn with ← →");
+    if (i == null) return toast(back ? "Nothing behind you" : "No way ahead — turn first");
     return goToSweep(i, back);
   }
   else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     const s = e.key === "ArrowUp" ? 0.5 : -0.5;
     const nx = w.x + s * Math.sin(rad(w.heading)), ny = w.y + s * Math.cos(rad(w.heading));
-    if (walkable(nx, ny)) { w.x = nx; w.y = ny; } else toast("Edge of walkable area");
+    if (walkable(nx, ny)) { w.x = nx; w.y = ny; } else toast("Edge of the path");
   } else return;
   e.preventDefault();
   state.target = null;
@@ -345,7 +345,7 @@ async function startRecording() {
     });
   } catch (e) {
     rec.anchor = null;
-    return toast(`Microphone not available: ${e.name}`, 3000);
+    console.warn("microphone:", e.name); return toast("Microphone isn't available", 3000);
   }
   const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
   const mr = (rec.mr = new MediaRecorder(rec.stream, mime ? { mimeType: mime } : {}));
@@ -411,7 +411,7 @@ async function finishRecording(blob) {
     document.dispatchEvent(new CustomEvent("recording-finished", { detail }));
   } catch (e) {
     $("recState").textContent = "";
-    toast(`Save failed: ${e.message}`, 4000);
+    console.warn("save failed:", e.message); toast("Couldn't save — try again", 4000);
     document.dispatchEvent(new CustomEvent("recording-failed"));
   }
   setTimeout(() => ($("recState").textContent = ""), 4000);
@@ -506,7 +506,7 @@ async function playVoice(m) {
   stopVoice();
   const c = audio.ctx();
   const res = await fetch(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
-  if (!res.ok) return toast("Could not load this memory");
+  if (!res.ok) return toast("Couldn't get that — try again");
   const buf = await c.decodeAudioData(await res.arrayBuffer());
   if (state.hatWarning) return;
   const p = (play.panner = makePanner());
@@ -654,7 +654,7 @@ memHooks.push(() => {
         b.disabled = true;
         const r = await fetch(`/api/memories/${m.id}/decision`, { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ viewer: state.user, ...body }) });
-        if (!r.ok) { b.disabled = false; return toast((await r.json()).error); }
+        if (!r.ok) { b.disabled = false; return toast("Couldn't change that — try again"); }
         Object.assign(m, await r.json());
         renderMemories();
       };
@@ -684,7 +684,7 @@ onWalkerChange(() => {
   const snapped = norm360(-k * 90);
   img.classList.add("loading");
   img.onload = () => img.classList.remove("loading");
-  img.onerror = () => { img.classList.remove("loading"); toast("View not available"); };
+  img.onerror = () => { img.classList.remove("loading"); toast("No view here"); };
   img.src = `/api/view?building=${state.plan.building.id}&sweep=${w.sweep}&heading=${snapped}`;
   $("viewCap").textContent = s ? s.room : "";
 });

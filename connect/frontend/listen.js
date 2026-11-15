@@ -9,28 +9,23 @@
   const gx = window.gallery;
   const L = { on: false };
   const NUM = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-  const count = (n, one, many) => `${n <= 10 ? NUM[n][0].toUpperCase() + NUM[n].slice(1) : n} ${n === 1 ? one : many}`;
+  const num = (n) => (n <= 10 ? NUM[n] : String(n));
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const vary = Speech.vary;
 
-  // ---------- voice: a natural English voice where the browser has one ----------
-  const PREFS = [/(Ava|Aria|Jenny|Emma|Michelle|Sonia|Libby|Natasha|Clara).*(Natural|Online)/i, /Google US English/i,
-                 /Google UK English Female/i, /Samantha/i, /Zira/i];
-  let voice = null;
-  const pickVoice = () => {
-    const vs = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
-    for (const re of PREFS) { const v = vs.find((x) => re.test(x.name)); if (v) return (voice = v); }
-    return (voice = vs[0] || null);
-  };
-  speechSynthesis.onvoiceschanged = pickVoice;
-  pickVoice();
-  function say(text, { then } = {}) {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-US";
-    if (voice || pickVoice()) u.voice = voice;
-    u.rate = 0.95; u.pitch = 1.05;
-    if (then) { let done = false; const go = () => { if (!done) { done = true; then(); } }; u.onend = go; setTimeout(go, 400 + text.length * 70); }
-    speechSynthesis.speak(u);
-    $("listenLine").textContent = text;
+  // ---------- voice: everything goes through Speech (speech.js): interruptible, capped, no filler, no repeats ----------
+  function say(text, { kind = "arrival", force = false, then = null } = {}) {
+    const spoken = Speech.say(text, { kind, force, onend: then ? () => then() : null });
+    if (spoken) $("listenLine").textContent = spoken;
+    else if (then) then();
+    return spoken;
+  }
+  const hinted = new Set();                         // hints are said once, not every time
+  const once = (key, text) => (hinted.has(key) ? "" : (hinted.add(key), ` ${text}`));
+  function whenWords(iso) {
+    const days = Math.round((new Date(new Date().toDateString()) - new Date(new Date(iso).toDateString())) / 864e5);
+    return days <= 0 ? "earlier today" : days === 1 ? "yesterday" : days < 7 ? "a few days ago" : days < 14 ? "last week"
+      : days < 31 ? "a few weeks ago" : days < 62 ? "last month" : "a while back";
   }
 
   // ---------- tones ----------
@@ -60,78 +55,97 @@
   // ---------- what is in focus ----------
   const place = () => G.places[G.placeIdx];
   const mem = () => { const p = place(); return p && p.memories[Math.min(G.memIdx, p.memories.length - 1)]; };
+  // Arriving at a place: the place first, then what's there, then where it sits in the list. 3-4 sentences, < 20 s.
   function placeLine() {
     const p = place();
-    if (!p) return G.mode === "family" ? "Nothing has been shared with you yet." : "There are no memories yet.";
-    return `Place ${G.placeIdx + 1} of ${G.places.length}. ${p.name}. ${count(p.memory_count, "memory", "memories")}.`;
+    if (!p) return G.mode === "family" ? "Nothing shared with you yet." : "No memories yet.";
+    const name = p.name, n = p.memory_count, at = `${G.placeIdx + 1} of ${G.places.length}`;
+    const cnt = `${num(n)} ${n === 1 ? "memory" : "memories"}`, when = whenWords(p.latest_at);
+    const where = p.building.name.replace(/ foyer, Princeton$/, ", Princeton");
+    const from = G.mode === "shared" ? [...new Set(p.memories.map((m) => m.author_id))].map(gx.nameOf || ((x) => x)).join(" and ") : "";
+    return from
+      ? vary("place.shared", [`${name}, from ${from}. ${cap(cnt)}, the newest ${when}. ${cap(at)}.`,
+                              `${name}: ${cnt} from ${from}. Place ${at}.`,
+                              `${from}'s ${name.toLowerCase()}. ${cap(cnt)}. ${cap(at)}.`])
+      : vary("place", [`${name}. ${cap(cnt)}, the newest ${when}. Place ${at}.`,
+                       `${name}, at ${where}. ${cap(cnt)}. ${cap(at)}.`,
+                       `${name}: ${cnt}, last left ${when}. Place ${at}.`,
+                       `${name} — ${cnt} here. ${cap(at)}.`]);
   }
+  // A memory: what was said comes first. Visibility only when it isn't "only you".
   function memLine() {
-    const p = place(), m = mem();
+    const m = mem();
     if (!m) return "No memory here.";
-    const t = m.transcript || {};
-    const words = t.text ? ` It begins: ${t.text.split(/\s+/).slice(0, 14).join(" ")}${t.text.split(/\s+/).length > 14 ? "…" : ""}` : "";
-    const vis = G.mode === "author" ? ` ${gx.visOf(m).say[0].toUpperCase()}${gx.visOf(m).say.slice(1)}.` : "";
-    return `Memory ${G.memIdx + 1} of ${p.memories.length}. Left ${gx.dateHuman(m.created_at, true)}.${vis}${words} Space to play.`;
+    const t = (m.transcript || {}).text, when = whenWords(m.created_at);
+    const w = t ? t.split(/\s+/) : [];
+    const ex = t ? `“${w.slice(0, 14).join(" ").replace(/[.,;]$/, "")}${w.length > 14 ? "…" : ""}”` : "";
+    const v = gx.visOf(m);
+    const vis = G.mode !== "author" || v.quiet ? "" : ` ${{ family: "Family can hear it.", everyone: "Everyone who visits can hear it.",
+      review: "Waiting for review.", draft: "Still a draft." }[v.cls] || ""}`;
+    const who = G.mode !== "author" ? (gx.nameOf ? gx.nameOf(m.author_id) : m.author_id) : "";
+    if (!ex) return `A recording from ${when}, no words.${vis}${once("space", "Space plays it.")}`;
+    return (who
+      ? vary("mem.shared", [`${who}, ${when}: ${ex}`, `${ex} — ${who}, ${when}.`, `From ${who}, ${when}: ${ex}`])
+      : vary("mem", [`${ex} — ${when}.`, `${cap(when)}: ${ex}`, `From ${when}: ${ex}`])) + vis + once("space", "Space plays it.");
   }
-  const HELP = "Left and right move between places. Up and down move between memories in a place. " +
-               "Space plays a memory, or stops it. D describes the place. M looks closer, which takes a few seconds. " +
-               "T takes you there, in the 3D walk. " +
-               "H repeats this. Escape leaves listen mode.";
+  const HELP = "Left and right move between places. Up and down, between memories. Space plays or stops. " +
+               "D describes the place. M looks closer, which takes a few seconds. T takes you there. Escape leaves.";
 
   // ---------- actions (keyboard and hat share them) ----------
   const actions = {
-    left() { if (G.placeIdx === 0) { EAR.edge(); return say(`This is the first place. ${placeLine()}`); }
+    // at an edge: a tone and a few words, never the whole line again (the user just heard it)
+    left() { if (G.placeIdx === 0) { EAR.edge(); return say(vary("edge.first", ["First place.", "That's the first."]), { kind: "short" }); }
              gx.stopMemory(); G.placeIdx--; G.memIdx = 0; EAR.move(); say(placeLine()); },
-    right() { if (G.placeIdx >= G.places.length - 1) { EAR.edge(); return say(`That was the last place. ${placeLine()}`); }
+    right() { if (G.placeIdx >= G.places.length - 1) { EAR.edge(); return say(vary("edge.last", ["Last place.", "That's the last one."]), { kind: "short" }); }
               gx.stopMemory(); G.placeIdx++; G.memIdx = 0; EAR.move(); say(placeLine()); },
     up() { if (!mem()) { EAR.edge(); return say(placeLine()); }
-           if (G.memIdx === 0) { EAR.edge(); return say(`This is the first memory here. ${memLine()}`); }
+           if (G.memIdx === 0) { EAR.edge(); return say(vary("edge.top", ["First one here.", "Top of the list."]), { kind: "short" }); }
            gx.stopMemory(); G.memIdx--; EAR.move(); say(memLine()); },
     down() { const p = place(); if (!p) { EAR.edge(); return say(placeLine()); }
-             if (G.memIdx >= p.memories.length - 1) { EAR.edge(); return say(`That was the last memory here. ${memLine()}`); }
+             if (G.memIdx >= p.memories.length - 1) { EAR.edge(); return say(vary("edge.bottom", ["Last one here.", "That's all here."]), { kind: "short" }); }
              gx.stopMemory(); G.memIdx++; EAR.move(); say(memLine()); },
     async play() {
       const m = mem();
-      if (!m) { EAR.edge(); return say("Nothing to play here."); }
-      if (G.audio) { gx.stopMemory(); EAR.end(); return say("Stopped."); }
-      speechSynthesis.cancel(); EAR.play();
+      if (!m) { EAR.edge(); return; }
+      if (G.audio) { gx.stopMemory(); EAR.end(); return; }          // stopping answers with a tone, not words
+      Speech.cancel(); EAR.play();
       const ok = await gx.playMemory(m, { onend: () => { EAR.end(); } });
-      if (!ok) { EAR.error(); say("Sorry, I couldn't play that memory."); }
+      if (!ok) Speech.oops();
     },
     async describe() {
       const m = mem();
-      if (!m) { EAR.edge(); return say("Nothing to describe here."); }
+      if (!m) { EAR.edge(); return; }
       gx.stopMemory();
       // cached only: written once when the memory was saved. The live call is M, and only M.
-      if (m.description) { EAR.ready(); return say(m.description.text); }
+      if (m.description) { EAR.ready(); return say(m.description.text, { kind: "detail", force: true }); }
       EAR.edge();
-      say(G.mode === "family" ? "This place hasn't been described yet." : "This place hasn't been described yet. M looks closer.");
+      say(G.mode === "family" ? "Not described yet." : "Not described yet. M looks closer.", { kind: "short" });
     },
     async more() {
       const m = mem();
-      if (!m) { EAR.edge(); return say("Nothing here to look at."); }
-      if (G.mode === "family") { EAR.edge(); return say("Tell me more is not available on a family link."); }
-      gx.stopMemory();
-      say("Looking closer. This takes a few seconds.");
-      const beat = setInterval(() => tone(740, 0.05, 0.035), 1600);
+      if (!m) { EAR.edge(); return; }
+      if (G.mode === "family") { EAR.edge(); return say("Not on a family link.", { kind: "short" }); }
+      gx.stopMemory(); Speech.cancel();
+      const beat = setInterval(() => tone(740, 0.05, 0.035), 1400);      // waiting is a tone, never words
+      tone(740, 0.05, 0.035);
       try {
         const body = await gx.tellMeMore(m);
         clearInterval(beat); EAR.ready();
-        if (L.on && mem() === m) say(`${body.bearings} ${body.text}`);   // moved on meanwhile: a tone only
+        if (L.on && mem() === m) say(`${body.bearings} ${body.text}`, { kind: "more", force: true });
       } catch (e) {
-        clearInterval(beat); EAR.error();
-        if (L.on && mem() === m) say("I couldn't look closer right now.");
+        clearInterval(beat);
+        if (L.on && mem() === m) Speech.oops();
       }
     },
     there() {
       const m = mem();
-      if (!m) { EAR.edge(); return say("Nothing to go to here."); }
-      if (G.mode === "family") { EAR.edge(); return say("Take me there is not available on a family link."); }
+      if (!m) { EAR.edge(); return; }
+      if (G.mode === "family") { EAR.edge(); return say("Not on a family link.", { kind: "short" }); }
       gx.stopMemory(); EAR.play();
-      say("Opening the 3D walk at that spot. When it opens, press any key to hear where the memory is.",
-          { then: () => (location.href = gx.takeMeThere(m)) });
+      say(vary("there", ["Taking you there. Any key when it opens.", "On the way. Press any key once it's open."]),
+          { kind: "short", force: true, then: () => (location.href = gx.takeMeThere(m)) });
     },
-    help() { EAR.move(); say(HELP); },
+    help() { EAR.move(); say(HELP, { kind: "help", force: true }); },
     leave() { setListen(false); },
   };
   window.gallery.listenActions = actions;
@@ -144,10 +158,9 @@
     if (on) {
       if (document.activeElement) document.activeElement.blur();
       EAR.on();
-      const empty = !G.places.length;
-      say(empty ? placeLine() : `Listen mode. ${placeLine()} Left and right for places, up and down for memories, space to play. H for help.`);
+      say(`${placeLine()}${G.places.length ? once("keys", "Arrows move, Space plays, H for help.") : ""}`, { force: true });
     } else {
-      gx.stopMemory(); speechSynthesis.cancel(); EAR.off();
+      gx.stopMemory(); Speech.cancel(); EAR.off();
       const p = place();
       if (p) location.hash = `place=${encodeURIComponent(p.id)}`;   // the screen shows where you were
     }
@@ -166,7 +179,7 @@
     e.preventDefault();
     const a = KEYS[e.key];
     if (a) actions[a]();
-    else if (!["Shift", "Control", "Alt", "Meta", "Tab"].includes(e.key)) { EAR.edge(); say("Press H for help."); }
+    else if (!["Shift", "Control", "Alt", "Meta", "Tab"].includes(e.key)) { EAR.edge(); say("H for help.", { kind: "short" }); }
   }, true);
   $("listenBtn").hidden = false;
   $("listenBtn").onclick = () => setListen(true);
@@ -184,6 +197,7 @@
     es.onmessage = (ev) => {
       let b;
       try { b = JSON.parse(ev.data).button; } catch (_) { return; }
+      Speech.cancel();                                   // a hat button interrupts speech like a key does
       if (b === "listen") return setListen(!L.on);
       if (!L.on) setListen(true);
       if (actions[b]) actions[b]();
