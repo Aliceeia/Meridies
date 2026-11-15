@@ -12,7 +12,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-URL = "http://localhost:8765/"
+URL = "http://localhost:8765/walk"
 STEP = sys.argv[1] if len(sys.argv) > 1 else "all"
 OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(".")
 
@@ -83,11 +83,11 @@ with sync_playwright() as pw:
         assert ahead[1] < -2.5 and abs(ahead[0]) < 0.5, "should be ahead"
         assert left[0] < -2.5 and abs(left[1]) < 0.5, "should be on the left"
         page.screenshot(path=str(OUT / "step3_playing.png"))
-        page.check("#hat")
+        page.evaluate("setHatWarning(true)")
         assert page.evaluate("play.playingId") is None, "hat warning did not stop memory audio"
         page.click("#listen")
         assert page.evaluate("play.playingId") is None, "played while hat warning"
-        page.uncheck("#hat")
+        page.evaluate("setHatWarning(false)")
         print("hat gate: ok")
 
     if STEP in ("4", "all"):

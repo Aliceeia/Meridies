@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meridies · Meri</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif;color:#eee6d8;background:#0b0a09}*{box-sizing:border-box}body{margin:0;min-height:100dvh;overflow-x:clip}header{padding:28px 38px;display:flex;justify-content:space-between;font-size:13px;letter-spacing:.16em}a{color:#c8b58d;text-decoration:none}main{min-height:75vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}h1{font-family:Georgia,serif;font-weight:400;font-size:clamp(52px,8vw,100px);letter-spacing:-.04em;margin:0 0 18px}.intro{font-size:16px;color:#aaa092}.wave{height:120px;width:min(460px,80vw);display:flex;align-items:center;justify-content:center;gap:5px;margin:24px 0 35px}.wave i{display:block;width:4px;border-radius:10px;background:#d6bd84;opacity:.75;transition:height .12s;height:10px}.working .wave i,.speaking .wave i{animation:pulse 1.4s ease-in-out infinite alternate;animation-delay:var(--delay)}@keyframes pulse{to{height:var(--peak);opacity:1}}button,input{font:inherit;border:1px solid #d6bd8433;border-radius:999px;background:#1a1713;color:#eee6d8;padding:13px 24px}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #ddc183;outline-offset:5px}#mic{background:#d6bd84;color:#211b11;min-width:210px}#status{min-height:24px;font-size:13px;color:#a89d8b;margin:18px}#answer{max-width:650px;line-height:1.7;white-space:pre-wrap;font-family:Georgia,serif;font-size:23px;margin:10px 0}form{display:flex;gap:8px;margin:22px 0;max-width:520px;width:100%}input{flex:1;min-width:0;background:transparent}#sources{font-size:12px;color:#948670;max-width:600px}footer{text-align:center;color:#70685c;font-size:12px;padding:22px}.hint{font-size:13px;color:#857c6d}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+main{min-height:calc(100dvh - 80px);justify-content:flex-start;padding-top:calc(50dvh + 180px - 72px)}
+.identity{position:absolute;top:50dvh;left:50%;transform:translate(-50%,-50%);width:min(790px,90vw);height:270px}
+.identity h1{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;margin:0}
+.identity img{display:block;width:81%;height:auto;max-height:150px;object-fit:contain}
+.wave{position:absolute;inset:0;margin:0;width:100%;height:100%;display:block;pointer-events:none}
+.wave i{position:absolute;width:3px;transform:translate(-50%,-50%) rotate(var(--angle));opacity:.68;box-shadow:0 0 9px #d6bd841a}
+.intro{position:absolute;top:calc(50dvh + 140px);left:20px;right:20px;font-size:13px;letter-spacing:.05em}
+#suggestions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:650px;margin:12px 0}
+#suggestions button{font-size:13px;padding:9px 16px;color:#d6bd84;background:transparent}
+#answer{font-size:19px;max-width:700px}
+@media(max-width:600px){header{padding:22px}.identity{top:38dvh;height:160px;width:94vw}.intro{top:calc(38dvh + 90px);font-size:11px}main{padding-top:calc(38dvh + 135px - 60px)}.identity img{width:83%}form{margin:15px 0}#answer{font-size:17px}.hint{font-size:11px}}
+
+/* Warm ivory and light brown. */
+:root{color-scheme:light;background:#b99e83;color:#46372c}
+body{background:radial-gradient(ellipse 50% 40% at 50% 46%,#ccb49780 0%,#bea18440 65%,transparent 100%),linear-gradient(150deg,#c2aa90,#ad8e72);background-attachment:fixed}
+.identity::before{content:"";position:absolute;inset:-65px -45px;border-radius:50%;background:radial-gradient(ellipse,#d0aa7130,transparent 72%);filter:blur(22px);pointer-events:none}
+.identity img{filter:none}
+.wave i{background:#a67d51;opacity:.8;box-shadow:0 0 8px #aa825018}
+.wave i:nth-child(3n){background:#c29b68}
+.wave i:nth-child(3n+1){background:#8b6850}
+a{color:#765334}
+.intro,#status{color:#715e4e}
+button,input{background:#f9f5ef;border-color:#b69b7c80;color:#493729}
+input{background:#fffcf680}
+input::placeholder{color:#8c7764;opacity:1}
+button:hover{border-color:#8d6946;background:#eadbc9}
+#mic{background:#896443;color:#fffaf3;box-shadow:0 6px 22px #80603a20}
+#mic:hover{background:#745136}
+#sources,.hint,footer{color:#7b6755}
+#suggestions button{color:#6d4c30;background:#f7eee0;border-color:#b99a7380}
+button:focus-visible,a:focus-visible,input:focus-visible{outline-color:#865a31}
+@media(max-width:600px){.identity::before{inset:-45px 0}}
+</style></head><body><header><a href="/">MERIDIES</a><a href="/gallery">Digital gallery ↗</a></header><main><div class="identity"><div class="wave" aria-hidden="true" id="wave"></div><h1><img src="/meridies-logo.png" alt="Meridies"></h1></div><div class="intro">The voices you keep. The places you remember.</div><button id="mic" aria-pressed="false">Enable microphone</button><div id="status" role="status">Say “Hi Meri” to begin.</div><p id="answer" aria-live="polite"></p><form id="ask"><input id="question" aria-label="Ask Meri" placeholder="Or type a question…" autocomplete="off"><button>Ask</button></form><div id="suggestions" aria-label="Memory suggestions"></div><div id="sources"></div><p class="hint">“Digital gallery” · “Hear my memories” · “Take me to the living room”</p></main><footer>Your memories. Your places. Your voice.</footer><script src="speech.js"></script><script src="home.js"></script></body></html>

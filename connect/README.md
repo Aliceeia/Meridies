@@ -1,5 +1,85 @@
 # connect/ — the memory layer
 
+Two halves, connected by one thing only: a saved recording.
+
+| Page | What |
+|---|---|
+| `/live` | The hat. Status board (the obstacle list from `integration/` on ZeroMQ 5556; tones come from `audio/engine.py`), 10 s recording, camera context on demand, demo warning switch. Works with no network: the page is cached by `sw.js`, recordings go to IndexedDB first and upload whenever the server answers. You choose where you are; nothing tracks you. |
+| `/` | MeriVerse, the gallery. A timeline of memories grouped by day, filterable by place (places are derived from saved memories). Each entry: cover, excerpt, Play, Take me there; opening one shows the full memory, the description of the spot, and "Who can hear this". Tabs: **Memories** / **Shared with me** (family memories from people whose circle you're in). The profile menu holds the account switch, **Your circle** (members + family link), the hat's live view and demo data. **L** = listen mode (screen dark; ← → places, ↑ ↓ memories, Space play, D describe, T take me there, H help). Design tokens are one `:root` block in `gallery.html`. |
+| `/f/<token>` | Family view: only the owner's `family` memories, read-only. Made and turned off from the gallery's "Family link". |
+| `/walk` | The 3D walk ("Take me there": `/walk?building=&memory=` stands you a few steps from the memory, facing it; first key chimes it). |
+
+### How AI is used: intent decides what plays; AI only generates content, mostly ahead of time
+
+| Request | What answers | Speed |
+|---|---|---|
+| arrive somewhere | memory count + chimes (walk page, local) | instant |
+| "what's around me" (W in the walk, C on /live) | `/api/around`: cached description + bearings from `backend/spatial.py` (maths) | instant, no AI |
+| "play that memory" (Space / Play) | the original recording | instant |
+| "tell me more" (M, or the button) | `/api/tell-me-more`: ONE Gemini call with the first-person render here, the transcripts within 5 m the viewer may hear, and the resolved bearings. The model is told not to state directions or distances; those are spoken from the resolver. | 2–3 s, only on request |
+
+Pre-computed once, after a memory is saved: the transcript and the description of the spot. Nothing calls Gemini on
+movement. **Hazards and memories are linked by geometry:** a memory anchored within 1 m of a hazard is about the same
+thing, so the hazard line carries the note: *"Chandelier, one metre six, three steps ahead. You left a note here last
+week: 'Careful, the chandelier here hangs low'."* Tests: `pytest connect/tests/test_spatial.py`.
+
+Sample memories (`tools/seed_samples.py`, `is_sample: true`): your own in the Princeton foyer and the La Mirada dining
+room, and ones shared with you by two blind friends, Maya and Theo (you're in their circles). Voices are Microsoft
+neural voices via `edge-tts` (seed tool only; `uv pip install edge-tts`), one voice per person.
+
+### Spoken output (acceptance criteria: `tests/test_speech.py`, `tests/speech.test.js`)
+
+Every page speaks through `frontend/speech.js`; the server's templates live in `backend/spatial.py`.
+
+- **Interruptible:** any key, tap or hat button cancels speech at once (capture phase, before the action runs).
+- **Length:** arrival ≤ 4 sentences and < 20 s; hat warning one clause < 2 s; tell me more ≤ 6 sentences; nothing
+  over 30 s unasked.
+- **Front-loaded, no filler:** the point in the first four words (hazards first). "I can see", "it appears", "in this
+  image", apologies, AI talk and system narration are stripped from templates and model text alike. Waiting is a tone.
+- **Numbers:** steps, rounded ("about six steps"); metres only for a hazard's height; never degrees.
+- **Silence:** arrivals say only what changed (a new hazard ahead, a new room, a memory newly in range), nothing
+  otherwise; words heard in full in the last 20 s aren't repeated; edges answer with a tone and a few words; M right
+  after W/C at the same spot skips the bearings it just said.
+- **Varied:** every template has several forms and never uses the same one twice in a row.
+- **Errors:** "I couldn't get that — try again." and a tone. Nothing more.
+
+`pytest -s connect/tests/test_speech.py` prints ten consecutive arrivals through the La Mirada scan to read aloud.
+
+### The system voice (system speech only; memories are never synthesised)
+
+- `backend/voice.py`: Gemini TTS (`gemini-3.8-flash-tts`, then the other TTS models), voice **Sulafat** by default,
+  A/B in the gallery's profile menu (Sulafat, Aoede, Zephyr, Puck). Gemini returns raw PCM at 24 kHz mono 16-bit;
+  every clip is written as WAV with that rate in its header, so nothing guesses it.
+- Delivery: a director's-notes prompt (TTS models accept no system instruction) asking for a friend who knows the
+  place; "alert" for hazards/warnings, "calm" for descriptions, "plain" for status. Clips far longer than their words
+  (the model read the notes aloud) are rejected and retried, then made from the bare line. Playback adds pace on top:
+  alert ×1.1, calm ×0.95, pitch preserved.
+- Cache: one WAV per sentence, keyed by voice + style + text, in `data/cache/voice/`. `/api/voice` serves only the
+  cache; a miss answers 404 at once (the page speaks that line in the browser voice, never mixing two voices in a line)
+  and the clip is made in the background for next time.
+- **Quota:** the free tier allows 10 TTS requests per day per model. `python connect/tools/voice_warm.py --priority`
+  makes the most-heard lines; `voice_warm.py` (resumable) makes the full demo set (~330 clips) over several days, or
+  at once with billing enabled. `--voice Aoede` warms another voice for A/B.
+- A memory with no audio file says "There's no recording for this one" — its transcript is never read in its place.
+
+### Gallery rules (enforced by the server, tested in `tests/test_gallery_server.py`)
+
+- `visibility`: `private` (default) | `family` | `community`. Only the author changes it. `community` is only ever a
+  pending-review request in a public space (no browsing UI yet). Private audio, covers and images answer 403 to
+  everyone else.
+- A place exists only because a visible memory was saved there: places are computed per request (building + room,
+  or yard zone) from what that viewer may see. No visits, paths or dwell times are stored anywhere.
+- After each save one background worker fills in: Gemini transcript (ffmpeg → mp3), cover image (hat camera frame,
+  else the first-person scan render at that sweep and heading, else the drone-scan crop for the yard), description.
+- Hat buttons: `POST /api/hat/button {"button": "left|right|up|down|play|describe|there|help|listen"}` drives listen
+  mode in any open gallery page (SSE `/api/hat/events`). Only the button name travels.
+
+Tests: `pytest connect/tests/test_gallery_server.py connect/tests/test_sharing_server.py`,
+`python connect/tests/e2e_gallery.py listen`, `python connect/tests/e2e_live.py` (both run their own server on a
+scratch copy; your memories are not touched).
+
+## The walk (original memory layer)
+
 Arrive at a place → record (until you stop) → hear it back → keep it private (default) → come back later → hear it
 from that direction → optionally an AI description of the place from aerial + drone imagery.
 

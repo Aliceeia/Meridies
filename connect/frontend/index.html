@@ -137,6 +137,7 @@
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; } }
 </style>
+<link rel="stylesheet" href="walk-overlay.css">
 </head>
 <body>
 <main>
@@ -154,6 +155,7 @@
   </section>
 
   <aside>
+    <a href="/gallery" id="toGallery" class="where" style="text-decoration:none">← Gallery <span class="key">G</span></a>
     <div class="where" id="whereLine">Loading the place…</div>
 
     <section id="nearby" hidden aria-live="polite">
@@ -179,8 +181,10 @@
     </section>
 
     <section>
-      <button id="whereami">Where am I?</button>
+      <button id="whereami">Where am I? <span class="key">W</span></button>
       <div id="whereText" aria-live="polite"></div>
+      <button id="tellmore" style="width:100%;margin-top:10px">Tell me more <span class="key">M</span></button>
+      <div id="tellText" aria-live="polite" style="margin-top:8px;font-size:16px;color:var(--dim)"></div>
     </section>
 
     <section>
@@ -193,7 +197,6 @@
         <div><b id="bname"></b> <span id="baddr"></span></div>
         <label class="row">Building <select id="building"></select></label>
         <label class="row">Listening as <select id="user"><option value="user-a">User A</option><option value="user-b">User B</option></select></label>
-        <label class="row"><input type="checkbox" id="hat"> Hat is warning (memory audio muted) — <code>setHatWarning()</code></label>
         <div>heading <span id="hdg">000</span>° · <span id="zone"></span> · <span id="pos"></span> · <span id="memCount">0</span> memories</div>
         <div id="debugMap"></div>
         <figure id="view" hidden><img id="viewImg" alt="Pre-rendered view"><figcaption id="viewCap"></figcaption></figure>
@@ -208,22 +211,27 @@
   <button class="opt" data-choice="share"><span class="ic" aria-hidden="true">👥</span><span class="t"></span><span class="n"></span></button>
   <button class="opt" data-choice="later"><span class="ic" aria-hidden="true">⏳</span><span class="t"></span><span class="n"></span></button>
 </div>
-<div id="blind" hidden><div>Listening. Press <b>SPACE</b> to see.</div></div>
+<div id="blind" hidden><div>Listening. Just say where you want to go, or say “help”. <b>SPACE</b> to see.</div></div>
 <div id="report" hidden role="dialog" aria-labelledby="reportLine">
   <div class="card">
-    <h3>Your walk, blindfolded</h3>
-    <svg id="reportMap" xmlns="http://www.w3.org/2000/svg" aria-label="Path walked without sight"></svg>
-    <div class="legend"><span><i style="background:#9fd8b4"></i>start</span><span><i style="background:#ff6b5e"></i>end</span>
-      <span><i style="background:var(--glow)"></i>memory found by sound</span><span><i style="background:#5a5048"></i>missed</span>
+    <h3>Blindfolded: what you found</h3>
+    <svg id="reportMap" xmlns="http://www.w3.org/2000/svg" aria-label="Memories found by sound"></svg>
+    <div class="legend"><span><i style="background:var(--glow)"></i>memory found by sound</span><span><i style="background:#5a5048"></i>missed</span>
       <span><i style="border:2px solid #fff;background:none"></i>listened</span></div>
     <p id="reportLine"></p>
     <button id="reportClose">Done</button>
   </div>
 </div>
+<script src="speech.js"></script>
 <script src="app.js"></script>
+<script src="scene-samples.js"></script>
 <script src="experience.js"></script>
 <script src="after_record.js"></script>
 <script src="after_record_ui.js"></script>
+<script src="meri-context.js"></script>
 <script src="voice.js"></script>
+<script src="arrive.js"></script>
+<script src="voice_control.js"></script>
+<script src="walk-overlay.js"></script>
 </body>
 </html>

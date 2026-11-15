@@ -24,6 +24,7 @@ BID = "test-building"
 @pytest.fixture()
 def api(tmp_path, monkeypatch):
     monkeypatch.setattr(srv, "MEM", tmp_path)
+    monkeypatch.setattr(srv, "AUTO_PROCESS", False)   # no Gemini calls from tests
     flags = {"public": False}
     monkeypatch.setattr(srv.desc, "load_plan", lambda bid: {"building": {"id": bid, **({"public": True} if flags["public"] else {})}})
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
@@ -101,6 +102,22 @@ def test_decide_later_and_keep_private(api):
     assert call("POST", f"/api/memories/{m['id']}/decision", {"viewer": "user-a", "choice": "later"})[1]["draft"] is True
     body = call("POST", f"/api/memories/{m['id']}/decision", {"viewer": "user-a", "choice": "private"})[1]
     assert body["draft"] is False and body["visibility"] == "private"
+
+
+def test_human_review_is_the_only_way_to_community(api):
+    from connect.tools import review
+    call, record, flags = api
+    flags["public"] = True
+    m = record()
+    with pytest.raises(SystemExit):                      # nothing pending yet: nothing to approve
+        review.decide(m["id"], "approved", "tester")
+    call("POST", f"/api/memories/{m['id']}/decision", {"viewer": "user-a", "choice": "share"})
+    assert [p["id"] for p in review.pending()] == [m["id"]]
+    out = review.decide(m["id"], "approved", "tester")
+    assert out["visibility"] == "community" and out["share_request"]["review"]["reviewer"] == "human:tester"
+    assert [x["id"] for x in call("GET", f"/api/memories?viewer=user-b&building_id={BID}")[1]] == [m["id"]]
+    # the author can still take it back
+    assert call("PATCH", f"/api/memories/{m['id']}", {"viewer": "user-a", "visibility": "private"})[1]["visibility"] == "private"
 
 
 def test_only_the_author_decides(api):

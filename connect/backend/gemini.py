@@ -50,7 +50,7 @@ FALLBACKS = ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini
 last_model = None  # the model that produced the most recent answer
 
 
-def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: int = 60, fallback: bool = True) -> str:
+def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: int = 60, fallback: bool = True, model: str | None = None) -> str:
     """parts: list of {"text": ...} or image_part(...). Returns the text answer.
     On quota (429) or overload (503) it retries, then moves to the next model in FALLBACKS."""
     global last_model, _preferred
@@ -58,7 +58,8 @@ def generate(parts: list, *, json_out: bool = False, retries: int = 2, timeout: 
     if json_out:
         body["generationConfig"] = {"responseMimeType": "application/json"}
     data = json.dumps(body).encode()
-    chain = [model_name()] + ([m for m in FALLBACKS if m != model_name()] if fallback else [])
+    selected = model or model_name()
+    chain = [selected] + ([m for m in FALLBACKS if m != selected] if fallback else [])
     if _preferred in chain:          # the model that answered last time goes first
         chain.remove(_preferred); chain.insert(0, _preferred)
     now = time.monotonic()

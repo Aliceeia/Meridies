@@ -177,7 +177,7 @@ map.addEventListener("click", (e) => {
       const d = Math.hypot(s.position.x - p.x, s.position.y - p.y);
       return d < b.d ? { s, d } : b;
     }, { s: null, d: 1e9 });
-    return s.d < 0.8 ? goToSweep(s.s.index) : toast("Click a highlighted sweep");
+    return s.d < 0.8 ? goToSweep(s.s.index) : toast("Pick a highlighted spot");
   }
   if (!walkable(p.x, p.y)) return toast("Not walkable there");
   state.target = p;
@@ -188,7 +188,7 @@ function goToSweep(i, keepHeading = false) {
   if (typeof rec !== "undefined" && rec.mr) return toast("Recording — stay put");
   const cur = sweepAt(state.walker.sweep);
   if (i === state.walker.sweep || state.target) return;
-  if (cur && !cur.neighbours.includes(i)) return toast("Not reachable in one step — pick a highlighted sweep");
+  if (cur && !cur.neighbours.includes(i)) return toast("Too far for one step — pick a highlighted spot");
   const s = sweepAt(i);
   state.target = { x: s.position.x, y: s.position.y, sweep: i, keepHeading };
 }
@@ -217,13 +217,13 @@ document.addEventListener("keydown", (e) => {
     if (state.target) return;
     const back = e.key === "ArrowDown";
     const i = neighbourToward(back ? norm360(w.heading + 180) : w.heading);
-    if (i == null) return toast(back ? "Nothing behind you to step back to" : "No sweep ahead — turn with ← →");
+    if (i == null) return toast(back ? "Nothing behind you" : "No way ahead — turn first");
     return goToSweep(i, back);
   }
   else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     const s = e.key === "ArrowUp" ? 0.5 : -0.5;
     const nx = w.x + s * Math.sin(rad(w.heading)), ny = w.y + s * Math.cos(rad(w.heading));
-    if (walkable(nx, ny)) { w.x = nx; w.y = ny; } else toast("Edge of walkable area");
+    if (walkable(nx, ny)) { w.x = nx; w.y = ny; } else toast("Edge of the path");
   } else return;
   e.preventDefault();
   state.target = null;
@@ -262,7 +262,9 @@ const audio = {
     return this._ctx;
   },
   // short sine tone with fades; dest defaults to master
+  uiSounds: false,
   tone(freq, dur, gain = 0.2, when = 0, dest = null) {
+    if (!this.uiSounds) return;
     const c = this.ctx(), t0 = c.currentTime + when;
     const o = c.createOscillator(), g = c.createGain();
     o.frequency.value = freq;
@@ -276,13 +278,17 @@ const audio = {
 };
 
 // ---------- memories ----------
-state.user = "user-a";
+state.user = localStorage.getItem("meridies.user") || "user-a";
 state.memories = [];
 const memById = (id) => state.memories.find((m) => m.id === id);
 
 async function loadMemories() {
   const q = new URLSearchParams({ viewer: state.user, building_id: state.plan.building.id });
-  state.memories = await (await fetch(`/api/memories?${q}`)).json();
+  const response = await fetch(`/api/memories?${q}`);
+  if(!response.ok)throw Error("Could not refresh memories");
+  const records=await response.json();
+  if(!Array.isArray(records))throw Error("Invalid memory list");
+  state.memories=records;
   renderMemories();
 }
 
@@ -340,12 +346,15 @@ async function startRecording() {
   rec.anchor = { x: +w.x.toFixed(2), y: +w.y.toFixed(2), z: 1.5 };
   rec.facing = { heading_deg: +w.heading.toFixed(1), ...(w.sweep != null ? { sweep: w.sweep } : {}) };
   try {
-    rec.stream = await navigator.mediaDevices.getUserMedia({
+    rec.stream = (window.voiceControl?.recordingStream()) || await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true }, // AEC keeps our own cue tones out of the take
     });
   } catch (e) {
     rec.anchor = null;
-    return toast(`Microphone not available: ${e.name}`, 3000);
+    $("recState").textContent = "Microphone unavailable. Check browser permission and selected input.";
+    speak("I cannot access the microphone. Check microphone permission and input device.", {kind:"short",force:true});
+    document.dispatchEvent(new CustomEvent("recording-failed"));
+    return;
   }
   const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
   const mr = (rec.mr = new MediaRecorder(rec.stream, mime ? { mimeType: mime } : {}));
@@ -383,38 +392,51 @@ async function startRecording() {
   }, 350);
 }
 
+let pendingMemory = null, uploadingMemory = false;
 async function finishRecording(blob) {
   clearInterval(rec.timer);
-  rec.stream.getTracks().forEach((t) => t.stop()); // mic closed
-  document.body.classList.remove("recording");
-  $("recStop").hidden = true;
-  showRecMarker(false);
-  const interrupted = rec.interrupted, autoStopped = rec.autoStopped;
-  // end cue: falling tones confirm it stopped. Never during an obstacle warning: the warning has priority.
-  if (!interrupted) { audio.tone(880, 0.12, 0.25); audio.tone(660, 0.12, 0.25, 0.15); }
-  $("recState").textContent = "Saving…";
-  const a = rec.anchor;
-  rec.facingSaved = rec.facing;
-  rec.mr = null; rec.stream = null; rec.anchor = null; rec.facing = null;
-  if (!blob.size) { $("recState").textContent = ""; document.dispatchEvent(new CustomEvent("recording-failed")); return; }
-  try {
-    // Saved PRIVATE on the server the moment it lands; an interrupted take is a private DRAFT.
-    const q = new URLSearchParams({ ...a, ...rec.facingSaved, building_id: state.plan.building.id, author_id: state.user,
-                                    ...(interrupted ? { draft: "1" } : {}) });
-    const r = await fetch(`/api/memories?${q}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
-    const saved = await r.json();
-    if (!r.ok) throw new Error(saved.error);
-    $("recState").textContent = interrupted ? "Stopped for the warning. Kept as a private draft." : "It's here now.";
-    await loadMemories();
-    const detail = { ...saved, interrupted, autoStopped };
-    document.dispatchEvent(new CustomEvent("memory-saved", { detail }));
-    document.dispatchEvent(new CustomEvent("recording-finished", { detail }));
-  } catch (e) {
-    $("recState").textContent = "";
-    toast(`Save failed: ${e.message}`, 4000);
-    document.dispatchEvent(new CustomEvent("recording-failed"));
+  rec.stream?.getTracks().forEach(t=>t.stop());
+  document.body.classList.remove('recording');
+  $('recStop').hidden=true; showRecMarker(false);
+  const take={blob, position:rec.anchor, facing:rec.facing, building:state.plan.building.id,
+    author:state.user, interrupted:rec.interrupted, autoStopped:rec.autoStopped};
+  rec.mr=null;rec.stream=null;rec.anchor=null;rec.facing=null;
+  if(!blob.size){
+    $('recState').textContent='No audio was captured. Please record again.';
+    speak('No audio was captured. Please record again.',{kind:'short',force:true});
+    document.dispatchEvent(new CustomEvent('recording-failed'));return;
   }
-  setTimeout(() => ($("recState").textContent = ""), 4000);
+  pendingMemory=take;
+  await retryPendingMemory();
+}
+async function retryPendingMemory() {
+  if(!pendingMemory || uploadingMemory)return;
+  const take=pendingMemory;uploadingMemory=true;
+  $('rec').disabled=true;$('retrySave')?.setAttribute('hidden','');
+  $('recState').textContent='Saving your memory…';
+  try {
+    const query=new URLSearchParams({...take.position,...take.facing,building_id:take.building,author_id:take.author,...(take.interrupted?{draft:'1'}:{})});
+    const response=await fetch(`/api/memories?${query}`,{method:'POST',headers:{'Content-Type':take.blob.type || 'audio/webm'},body:take.blob});
+    if(!response.ok)throw Error(`Upload failed (${response.status})`);
+    const saved=await response.json();
+    // A successful upload stays saved even if refreshing the list fails.
+    try { await loadMemories(); }
+    catch (_) {
+      if(!state.memories.some(m=>m.id===saved.id))state.memories.push(saved);
+      renderMemories();
+    }
+    pendingMemory=null;
+    $('recState').textContent='Memory saved. Only you can hear it.';
+    const detail={...saved,interrupted:take.interrupted,autoStopped:take.autoStopped};
+    document.dispatchEvent(new CustomEvent('memory-saved',{detail}));
+    document.dispatchEvent(new CustomEvent('recording-finished',{detail}));
+    if(take.interrupted)speak('Your memory is saved privately.',{kind:'short',force:true});
+  } catch (_) {
+    $('recState').textContent='Not saved yet. Your recording is kept here. Say “retry save” or use Retry save.';
+    $('retrySave')?.removeAttribute('hidden');
+    speak('The upload failed. I still have your recording. Say retry save. Keep this page open.',{kind:'detail',force:true});
+    document.dispatchEvent(new CustomEvent('recording-failed'));
+  } finally { uploadingMemory=false;$('rec').disabled=!!pendingMemory; }
 }
 
 function showRecMarker(on) {
@@ -432,10 +454,9 @@ state.hatWarning = false;
 // The ONLY link to the hardware half: while the hat warns, memory audio stays silent.
 window.setHatWarning = (on) => {
   state.hatWarning = !!on;
-  $("hat").checked = state.hatWarning;
   if (state.hatWarning) stopVoice();
 };
-$("hat").addEventListener("change", (e) => window.setHatWarning(e.target.checked));
+// (the demo "hat is warning" switch moved to /live; this hook stays for the hat)
 
 const play = { near: null, panner: null, src: null, gain: null, playingId: null, armed: new Set() };
 
@@ -486,6 +507,7 @@ function placePanner(p, m) {
   } else p.setPosition(r.right, 0, -r.fwd);
 }
 function chime(m) {
+  if (!audio.uiSounds) return;
   if (state.hatWarning) return;
   const p = makePanner();
   placePanner(p, m);
@@ -502,26 +524,66 @@ function chime(m) {
   setTimeout(() => p.disconnect(), 1400);
 }
 
+// a failure the person ran into, sent to the server log so it can be fixed (browser + error only; no location)
+function report(what, detail) {
+  console.warn(what, detail);
+  try { navigator.sendBeacon("/api/client-log", JSON.stringify({ what, detail, ua: navigator.userAgent })); } catch (_) {}
+}
+
 async function playVoice(m) {
   if (state.hatWarning) return toast("Hat is warning — memory muted");
   stopVoice();
   const c = audio.ctx();
   const res = await fetch(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
-  if (!res.ok) return toast("Could not load this memory");
-  const buf = await c.decodeAudioData(await res.arrayBuffer());
+  // a memory is the person's own recording: if there is none, say so; never read the transcript in a synthetic voice
+  if (!res.ok) return toast(res.status === 404 ? "There's no recording for this one" : "Couldn't get that — try again");
+  const bytes = await res.arrayBuffer();
+  // Short browser recordings (webm without a stated length) can make decodeAudioData fail or never finish.
+  // Then play the same file through a media element instead: same panner, so it still comes from its direction.
+  let decodeErr = null;
+  const buf = await Promise.race([c.decodeAudioData(bytes.slice(0)),
+                                  new Promise((_, no) => setTimeout(() => no(new Error("decode stalled")), 2500))])
+    .catch((e) => { decodeErr = `${e.name}: ${e.message}`; return null; });
+  if (decodeErr) report("memory decode", { memory: m.id, error: decodeErr, type: res.headers.get("Content-Type"), bytes: bytes.byteLength });
   if (state.hatWarning) return;
   const p = (play.panner = makePanner());
   placePanner(p, m);
-  const g = (play.gain = c.createGain()), src = (play.src = c.createBufferSource());
-  src.buffer = buf;
+  const g = (play.gain = c.createGain());
   const t0 = c.currentTime;
   g.gain.setValueAtTime(0, t0);
   g.gain.linearRampToValueAtTime(1, t0 + FADE);
-  src.connect(g).connect(p);
+  g.connect(p);
+  let src;
+  if (buf) {
+    src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(g);
+    src.start(t0);
+  } else {
+    src = new Audio(URL.createObjectURL(new Blob([bytes], { type: res.headers.get("Content-Type") || m.audio_type || "audio/webm" })));
+    c.createMediaElementSource(src).connect(g);
+    src.stop = (when) => setTimeout(() => src.pause(), Math.max(0, (when - c.currentTime) * 1000));   // same API as a buffer source
+    try { await src.play(); } catch (e) {
+      // last resort: the plain file, no direction, rather than nothing
+      const plain = new Audio(`${m.audio}?viewer=${encodeURIComponent(state.user)}`);
+      try { await plain.play(); }
+      catch (e2) {
+        report("memory playback", { memory: m.id, decode: "failed", element: `${e.name}: ${e.message}`, plain: `${e2.name}: ${e2.message}`,
+                                    type: res.headers.get("Content-Type"), bytes: bytes.byteLength, ctx: c.state });
+        return toast("This recording can't be played");
+      }
+      report("memory playback (plain fallback used)", { memory: m.id, element: `${e.name}: ${e.message}` });
+      src = plain;
+      src.stop = () => plain.pause();
+    }
+  }
+  play.src = src;
   src.onended = () => { if (play.src === src) { play.src = null; play.playingId = null; updateNearUI(); } };
-  src.start(t0);
   play.playingId = m.id;
   updateNearUI();
+  // a take with no words (a tap of the record button, or a quiet room) would otherwise sound like nothing happened
+  if ((m.transcript || {}).no_speech && typeof speak === "function")
+    speak("No words in this one, just the sound of the place.", { kind: "short", force: true });
 }
 function stopVoice() {
   if (!play.src) return;
@@ -655,7 +717,7 @@ memHooks.push(() => {
         b.disabled = true;
         const r = await fetch(`/api/memories/${m.id}/decision`, { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ viewer: state.user, ...body }) });
-        if (!r.ok) { b.disabled = false; return toast((await r.json()).error); }
+        if (!r.ok) { b.disabled = false; return toast("Couldn't change that — try again"); }
         Object.assign(m, await r.json());
         renderMemories();
       };
@@ -685,7 +747,7 @@ onWalkerChange(() => {
   const snapped = norm360(-k * 90);
   img.classList.add("loading");
   img.onload = () => img.classList.remove("loading");
-  img.onerror = () => { img.classList.remove("loading"); toast("View not available"); };
+  img.onerror = () => { img.classList.remove("loading"); toast("No view here"); };
   img.src = `/api/view?building=${state.plan.building.id}&sweep=${w.sweep}&heading=${snapped}`;
   $("viewCap").textContent = s ? s.room : "";
 });

@@ -31,7 +31,7 @@ with sync_playwright() as pw:
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script("window.__spoken = []; const _s = speechSynthesis.speak.bind(speechSynthesis);"
                          "speechSynthesis.speak = (u) => { window.__spoken.push(u.text); return _s(u); };")
-    page.goto("http://localhost:8765/?building=zvKHR9DHNjJ")
+    page.goto("http://localhost:8765/walk?building=zvKHR9DHNjJ")
     page.wait_for_function("() => state.ready === true")
 
     # --- 1. normal flow

@@ -161,10 +161,124 @@ function whereAmI() {
   parts.push(near ? `${near === 1 ? "A memory is" : `${near} memories are`} close by.` : "No memories right here.");
   return parts.join(" ");
 }
-$("whereami").addEventListener("click", () => {
-  const text = whereAmI();
-  $("whereText").textContent = text;
-  speak(text);
+// "What's around me" is instant: the room and doorways from the plan (above), hazards with any note left at
+// them, nearby memories and the cached description from the server's spatial resolver. No AI on this path.
+async function aroundMe(kind = "around", prev = "") {
+  const w = state.walker, s = sweepAt(w.sweep);
+  const q = new URLSearchParams({ viewer: state.user, building: state.plan.building.id, x: w.x.toFixed(2), y: w.y.toFixed(2),
+                                  heading: w.heading.toFixed(0), floor: (s && s.floor) || 0, kind, prev });
+  return (await fetch(`/api/around?${q}`)).json();
+}
+$("whereami").addEventListener("click", () => SceneSamples.play("where"));
+let heardAround = null;                           // M right after W at the same spot: don't repeat the bearings
+
+// Arriving somewhere (blindfolded): say only what changed — a hazard newly ahead, a new room, a memory newly in
+// range — and nothing at all when nothing did. Instant, no AI.
+let arrivalSig = "", arrivalBusy = false;
+onWalkerChange(async () => {
+  if (typeof blind === "undefined" || !blind.on || state.target || !isInterior() || arrivalBusy) return;
+  const key = `${state.walker.sweep}`;
+  if (key === onWalkerChange._lastSweep) return;
+  onWalkerChange._lastSweep = key;
+  arrivalBusy = true;
+  const routing = !!window.voiceRoute;              // decided now, not after the fetch (the route may end meanwhile)
+  try {
+    const r = await aroundMe("arrival", arrivalSig);
+    arrivalSig = r.sig;
+    // on a spoken route ("take me to the kitchen") only hazards are said on the way; the destination is said at the end
+    if (r.text && (!routing || /\bmetres?\b/.test(r.text))) speak(r.text, { kind: "arrival" });
+  } catch (_) { /* offline: the chimes still guide */ }
+  arrivalBusy = false;
+});
+// at the end of a spoken route: where you are now, in full (as on a first arrival)
+window.announceArrival = async (extra = "") => {
+  const seq = Speech.seq;
+  try {
+    const r = await aroundMe("arrival", "");
+    arrivalSig = r.sig;
+    if (Speech.seq !== seq) return;      // the person already asked for something else: don't talk over it
+    speak([r.text, extra].filter(Boolean).join(" "), { kind: "arrival", force: true });
+  } catch (_) { if (extra) speak(extra, { kind: "short", force: true }); }
+};
+
+// "Tell me more": the ONE live AI call, only when asked (button or M). Directions come from the resolver, the
+// three sentences from Gemini (the render here + the notes within 5 m).
+let moreController = null;
+const moreCache = new Map();
+memHooks.push(() => moreCache.clear());
+async function freshSceneDetail() {
+  if (moreController) moreController.abort();
+  const controller = moreController = new AbortController();
+  const w = { ...state.walker };
+  const pose = `${state.user}:${state.plan.building.id}:${w.sweep}:${Math.round(w.heading)}`;
+  stopVoice();
+  if (moreCache.has(pose)) {
+    const text = moreCache.get(pose);
+    $("tellText").textContent = text;
+    speak(text, {kind:"more", force:true});
+    moreController = null;
+    return;
+  }
+  // Give an immediate useful spoken answer while the richer description is requested.
+  if (!heardAround || Date.now() - heardAround.at > 60000 || heardAround.key !== `${w.sweep}:${Math.round(w.heading)}`) {
+    speak(whereAmI(), {kind:"detail", force:true});
+  }
+  const speechSeq = Speech.seq;
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  $("tellText").textContent = "…";
+  if (typeof startThinking === "function") startThinking();           // a heartbeat tone, not words
+  try {
+    const r = await fetch("/api/tell-me-more", { signal: controller.signal, method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viewer: state.user, building: state.plan.building.id, x: w.x, y: w.y, heading: w.heading,
+                             sweep: w.sweep, bearings: !(heardAround && Date.now() - heardAround.at < 60000
+                                                         && heardAround.key === `${w.sweep}:${Math.round(w.heading)}`) }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error);
+    const text = [body.bearings, body.text].filter(Boolean).join(" ");
+    if (moreController !== controller) return;
+    moreCache.set(pose, text);
+    $("tellText").textContent = text;
+    if (typeof stopThinking === "function") stopThinking();
+    if (Speech.seq === speechSeq) speak(text, { kind: "more", force: true });
+  } catch (e) {
+    if (typeof stopThinking === "function") stopThinking();
+    if (moreController !== controller) return;
+    console.warn("tell me more:", e.message);
+    $("tellText").textContent = "Couldn't get that — try again.";
+    if (Speech.seq === speechSeq) Speech.oops();
+  } finally {
+    clearTimeout(timeout);
+    if (moreController === controller) { moreController = null; stopThinking(); }
+  }
+}
+function moreText() {
+  const nearby=state.memories.filter(m=>relative(m).dist<=5).sort((a,b)=>relative(a).dist-relative(b).dist);
+  const heading=state.walker.heading;
+  // Only reuse body-relative scene descriptions from the same position and facing.
+  const scene=nearby.find(m=>m.description?.text && m.sweep===state.walker.sweep && Number.isFinite(m.heading_deg)
+    && Math.abs(((m.heading_deg-heading+540)%360)-180)<=20);
+  const note=nearby.find(m=>m.transcript?.text);
+  const parts=[];
+  if(scene){parts.push(whereAmI().split(/(?<=[.!?])\s+/)[0]);parts.push(scene.description.text);}
+  else parts.push(whereAmI());
+  if(note){
+    const words=note.transcript.text.split(/\s+/).slice(0,35).join(' ');
+    parts.push(`${note.author_id===state.user?'Your saved memory':'A memory shared here'} says: ${words}`);
+  }
+  if(!scene && !note)parts.push('There is no saved scene detail here yet. Say look closer for a fresh scene description.');
+  const text=Speech.shape(parts.join(' '),'more');
+  return text;
+}
+function tellMeMore(){ return SceneSamples.play("more"); }
+
+$("tellmore").addEventListener("click", tellMeMore);
+document.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (e.target.closest("select, input, textarea") || (k !== "m" && k !== "w") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if ((typeof rec !== "undefined" && rec.mr) || window.afterRecordBusy) return;
+  e.preventDefault();
+  if (k === "m") tellMeMore();
+  else if (!(typeof blind !== "undefined" && blind.on)) $("whereami").click();   // blindfold mode binds W itself
 });
 
 // ---------- a recording lands where it was made ----------
@@ -198,3 +312,19 @@ loadBuilding = async function (bid) {           // eslint-disable-line no-func-a
 
 onWalkerChange(() => { placeMarkers(); tidyList(); syncScene(); });
 memHooks.push(() => { placeMarkers(); tidyList(); });
+
+let voiceWarmTimer=null;
+function warmCurrentVoice(){
+  clearTimeout(voiceWarmTimer);
+  voiceWarmTimer=setTimeout(()=>{
+    voiceWarmTimer=null;
+    if(!state.ready || state.target || rec.mr || !window.voiceControl?.status.active)return;
+    Speech.prefetch("Hi, I'm Meri.",'help');
+    const sample=window.SceneSamples?.selected();
+    if(sample){Speech.prefetch(sample.where,'detail',true);Speech.prefetch(sample.more,'more',true);}
+  },800);
+}
+onWalkerChange(warmCurrentVoice);
+memHooks.push(warmCurrentVoice);
+let voiceWarmEnabled=false;
+document.addEventListener('voice-control-status',event=>{if(event.detail.active&&!voiceWarmEnabled)warmCurrentVoice();voiceWarmEnabled=event.detail.active;});

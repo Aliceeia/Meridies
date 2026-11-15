@@ -17,14 +17,12 @@ function pickVoice() {
 }
 speechSynthesis.onvoiceschanged = pickVoice;
 pickVoice();
-speak = function (text, { interrupt = true } = {}) {      // eslint-disable-line no-func-assign
+// Every utterance goes through Speech (speech.js): interruptible, length-capped, no filler, no repeats.
+Speech.muted = () => state.hatWarning;                 // an obstacle warning outranks every spoken word
+Speech.useVoice = true;                                // system lines in the cached human voice (memories never)
+speak = function (text, { kind = "any", force = false } = {}) {   // eslint-disable-line no-func-assign
   if (state.hatWarning) return earcon("muted");
-  if (interrupt) speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";                     // never let a Chinese system voice read English text
-  if (voice || pickVoice()) u.voice = voice;
-  u.rate = 0.92; u.pitch = 1.08; u.volume = 0.9;
-  speechSynthesis.speak(u);
+  return Speech.say(text, { kind, force });
 };
 
 // ---------- earcons: every action answers with its own short sound ----------
@@ -43,6 +41,7 @@ const EARCONS = {
 function earcon(name) {
   try { audio.ctx(); for (const [f, dur, g, when] of EARCONS[name] || []) audio.tone(f, dur, g, when); } catch (_) {}
 }
+Speech.tone = () => earcon("error");
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b && !["rec", "recStop", "listen", "whereami"].includes(b.id)) earcon("tap");   // those have their own sounds
@@ -51,7 +50,7 @@ const _toast = toast;
 toast = function (msg, ms) {                               // eslint-disable-line no-func-assign
   _toast(msg, ms);
   earcon("bump");
-  if (blind.on) speak(msg);
+  if (blind.on) speak(msg, { kind: "short" });
 };
 let lastSweep = null;
 onWalkerChange(() => {
@@ -64,26 +63,27 @@ document.addEventListener("memory-saved", (e) => {
 });
 
 // ---------- speak, don't show ----------
-// While Gemini thinks, say so once and keep a soft heartbeat going, so silence never means "broken".
+// Waiting is a tone, never words: a soft heartbeat, so silence never means "broken".
 let thinking = null;
 function startThinking() {
   stopThinking();
-  speak("Looking around. This takes a few seconds.");
-  thinking = setInterval(() => audio.tone(740, 0.05, 0.035), 1600);
+  // Waiting is silent; spoken responses and recordings remain audible.
 }
 function stopThinking() { clearInterval(thinking); thinking = null; }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b && /Describe/.test(b.textContent)) startThinking();
 }, true);
-document.addEventListener("described", (e) => { stopThinking(); earcon("ready"); setTimeout(() => speak(e.detail.description.text), 450); });
-document.addEventListener("describe-failed", (e) => { stopThinking(); earcon("error"); speak(e.detail); _toast(e.detail, 6000); });
+document.addEventListener("described", (e) => { stopThinking(); earcon("ready"); setTimeout(() => speak(e.detail.description.text, { kind: "detail" }), 450); });
+document.addEventListener("describe-failed", () => { stopThinking(); Speech.oops(); _toast("Couldn't describe this place — try again", 4000); });
 
-// Listen must always answer: if a recording can't be played, say so instead of staying silent.
+// Listen must always answer: if a recording can't be played, say so, plainly.
+// Only a memory that really failed to play is said aloud; any other background hiccup is logged, not spoken
+// (it used to say "I couldn't get that" for failures the person never caused).
 window.addEventListener("unhandledrejection", (e) => {
-  earcon("error");
-  speak("Sorry, I couldn't play that memory.");
-  console.warn("playback failed:", e.reason);
+  const r = e.reason || {};
+  console.warn("unhandled:", r.name, r.message);
+  if (r.name === "EncodingError" || /decode/i.test(r.message || "")) Speech.oops();
 });
 $("listen").addEventListener("click", () => audio.tone(880, 0.04, 0.06), true);   // the press registered
 $("whereami").addEventListener("click", () => {
@@ -119,28 +119,30 @@ memHooks.push(() => {
 });
 
 // ---------- blindfold mode ----------
-const blind = { on: false, t0: 0, path: [], reached: new Set(), heard: new Set(), timer: null };
+// No path is kept: only which memories were reached and heard. We never map where someone went.
+const blind = { on: false, t0: 0, reached: new Set(), heard: new Set(), timer: null };
 function setBlind(on) {
-  if (on === blind.on) return;
+  if (on === blind.on) { if(on) { clearTimeout(blind.welcomeTimer); blind.welcomeTimer=setTimeout(()=>speak(MeriContext.greeting(),{kind:"help",force:true}),250); } return; }
   blind.on = on;
   document.body.classList.toggle("blind", on);
-  $("blind").hidden = !on;
+  $("blind").hidden = true;
+  voiceControl.setAwake(on);
   document.activeElement && document.activeElement.blur();
   if (on) {
-    Object.assign(blind, { t0: performance.now(), path: [[state.walker.x, state.walker.y]], reached: new Set(), heard: new Set() });
+    Object.assign(blind, { t0: performance.now(), reached: new Set(), heard: new Set() });
     blind.timer = setInterval(() => { if (play.playingId) blind.heard.add(play.playingId); }, 250);
     earcon("dark");
-    setTimeout(() => speak("Blindfold on. Arrows to walk. Enter to listen. W, where am I. R, record. Space to see again."), 500);
+    blind.welcomeTimer = setTimeout(() => speak(MeriContext.greeting(), { kind: "help", force: true }), 500);
+    blind.lastSig = "";
   } else {
     clearInterval(blind.timer);
     earcon("light");
-    showReport();
+    Speech.cancel();
+    speak("Meri is standing by. Say Hi Meri when you need me.", {kind:"short", force:true});
   }
 }
 onWalkerChange(() => {
   if (!blind.on) return;
-  const [lx, ly] = blind.path[blind.path.length - 1], w = state.walker;
-  if (Math.hypot(w.x - lx, w.y - ly) > 0.15) blind.path.push([w.x, w.y]);
   for (const m of state.memories) if (relative(m).dist <= NEAR_M) blind.reached.add(m.id);
 });
 document.addEventListener("keydown", (e) => {
@@ -153,21 +155,19 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     if (rec.mr || window.afterRecordBusy) return;      // Enter belongs to the recording flow right now
     e.preventDefault();
-    if (play.near) playVoice(memById(play.near)); else { earcon("nothing"); speak("Nothing to listen to here."); }
+    if (play.near) playVoice(memById(play.near)); else { earcon("nothing"); speak("Nothing here to play.", { kind: "short" }); }
   } else if (e.key === "w" || e.key === "W") $("whereami").click();
   else if ((e.key === "r" || e.key === "R") && !rec.mr) $("rec").click();   // while recording, R stops (after_record_ui)
 }, true);
-$("blindBtn").addEventListener("click", () => setBlind(true));
+$("blindBtn").addEventListener("click", () => { if(voiceControl.status.active){setBlind(false);voiceControl.setActive(false);}else voiceControl.setActive(true); });
 
 function showReport() {
   const p = state.plan, secs = Math.round((performance.now() - blind.t0) / 1000);
-  let dist = 0;
-  for (let i = 1; i < blind.path.length; i++) dist += Math.hypot(blind.path[i][0] - blind.path[i - 1][0], blind.path[i][1] - blind.path[i - 1][1]);
   const total = state.memories.length, found = blind.reached.size, heard = blind.heard.size;
   const svg = $("reportMap");
   svg.replaceChildren();
   const pts = isInterior() ? p.rooms.flatMap((r) => r.polygon) : p.walkable;
-  const xs = pts.map((q) => q[0]).concat(blind.path.map((q) => q[0])), ys = pts.map((q) => q[1]).concat(blind.path.map((q) => q[1]));
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
   const x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, y0 = Math.min(...ys) - 1, y1 = Math.max(...ys) + 1;
   svg.setAttribute("viewBox", `${x0} ${-y1} ${x1 - x0} ${y1 - y0}`);
   const k = (x1 - x0) / 20;
@@ -184,14 +184,9 @@ function showReport() {
       opacity: got ? 0.95 : 0.6 }, svg);
     if (blind.heard.has(m.id)) svgEl("circle", { cx: m.position.x, cy: -m.position.y, r: 0.85 * k, fill: "none", stroke: "#fff", "stroke-width": 0.08 * k }, svg);
   }
-  svgEl("polyline", { points: blind.path.map(([x, y]) => `${x},${-y}`).join(" "), fill: "none", stroke: "#fff",
-    "stroke-width": 0.14 * k, "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": `${0.4 * k} ${0.25 * k}` }, svg);
-  const [sx, sy] = blind.path[0], [ex, ey] = blind.path[blind.path.length - 1];
-  svgEl("circle", { cx: sx, cy: -sy, r: 0.3 * k, fill: "#9fd8b4" }, svg);
-  svgEl("circle", { cx: ex, cy: -ey, r: 0.3 * k, fill: "#ff6b5e" }, svg);
-  const line = `${secs} seconds without sight. You walked ${dist.toFixed(1)} metres and found ${found} of ${total} ${total === 1 ? "memory" : "memories"} by sound${heard ? `, and listened to ${heard}` : ""}.`;
+  const line = `${secs} seconds without sight. You found ${found} of ${total} ${total === 1 ? "memory" : "memories"} by sound${heard ? `, and listened to ${heard}` : ""}.`;
   $("reportLine").textContent = line;
   $("report").hidden = false;
-  setTimeout(() => speak(line), 600);
+  setTimeout(() => speak(line, { kind: "short", force: true }), 600);
 }
 $("reportClose").addEventListener("click", () => ($("report").hidden = true));

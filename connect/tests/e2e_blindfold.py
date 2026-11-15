@@ -14,7 +14,7 @@ with sync_playwright() as pw:
     page.add_init_script("""window.__spoken = []; window.__tones = 0;
       const S = window.speechSynthesis; const orig = S.speak.bind(S);
       S.speak = (u) => { window.__spoken.push(u.text); return orig(u); };""")
-    page.goto("http://localhost:8765/?building=zvKHR9DHNjJ")
+    page.goto("http://localhost:8765/walk?building=zvKHR9DHNjJ")
     page.wait_for_function("() => state.ready === true")
     page.evaluate("() => { const t = audio.tone.bind(audio); audio.tone = (...a) => { window.__tones++; return t(...a); }; }")
     vis = page.evaluate("[...document.querySelectorAll('#memList .mem')].filter(c => getComputedStyle(c).display !== 'none').length")
@@ -36,7 +36,9 @@ with sync_playwright() as pw:
     page.wait_for_selector("#report", state="visible")
     time.sleep(1)
     print("report:", page.inner_text("#reportLine"))
-    print("path points:", page.evaluate("blind.path.length"), "| tones played:", page.evaluate("window.__tones"))
+    assert page.evaluate("blind.path === undefined"), "blindfold mode must not keep a path"
+    assert "metres" not in page.inner_text("#reportLine")
+    print("no path kept | tones played:", page.evaluate("window.__tones"))
     print("spoken:", [s[:70] for s in page.evaluate("window.__spoken")])
     print("voice:", page.evaluate("voice && voice.name"))
     page.screenshot(path=str(OUT / "blind_report.png"))
