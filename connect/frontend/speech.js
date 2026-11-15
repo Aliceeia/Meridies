@@ -126,10 +126,12 @@
       while(S._audioPending<2 && S._audioQueue.length){
         const item=S._audioQueue.shift();S._audioPending++;
         const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),30000);
-        fetch(`/api/voice?text=${encodeURIComponent(item.text)}&style=calm&wait=${item.cacheOnly||Date.now()<S._quotaUntil?0:1}&provider=gemini`,{signal:abort.signal})
+        fetch(`/api/voice?text=${encodeURIComponent(item.text)}&style=calm&wait=${item.cacheOnly||Date.now()<S._quotaUntil?0:1}&provider=gemini&encoding=wav2`,{signal:abort.signal})
           .then(async r=>{
             if(r.status===429){
-              S._quotaUntil=Date.now()+3600000;
+              const detail=await r.json().catch(()=>({}));
+              const retry=Number(detail.retryAfter);
+              S._quotaUntil=Date.now()+(Number.isFinite(retry)&&retry>0?retry:60)*1000;
               const error=Error('Gemini speech quota reached. Cached audio still works; new speech is temporarily unavailable.');
               for(const waiting of S._audioQueue.splice(0))waiting.reject(error);
               throw error;

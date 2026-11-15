@@ -1,7 +1,24 @@
 """Permission-filtered retrieval over saved memories and structured scene plans."""
 import json
 import re
-from . import gemini
+from . import gemini, approach
+
+# Meri currently dispatches tools by intent; no separate model-driven tool loop.
+TOOLS = {'describe_approach': approach.describe_approach}
+
+
+def approach_address(question, plans, history):
+    for text in [question] + [str(m.get('text','')) for m in reversed(history or [])
+                              if isinstance(m,dict) and m.get('role')=='user']:
+        match = re.search(r'\b\d{1,6}\s+[^?!;\n]{3,160}', text)
+        if match:
+            return match.group().strip().rstrip('.')
+    configured = gemini.secret('MERI_APPROACH_ADDRESS')
+    if configured:
+        return configured
+    # Home demo has no GPS/selected-building context: use its first mapped residence.
+    return next((p['building']['name'] for p in plans.values()
+                 if re.match(r'^\d+\s',p['building'].get('name',''))), '')
 
 
 def personal_greeting(viewer, memories, plans):
@@ -36,6 +53,29 @@ def respond(question, viewer, memories, plans, history=None):
     if not question:
         raise ValueError('Please say or type a question')
     lower = question.lower()
+    prior = next((str(m.get('text','')) for m in reversed(history or [])
+                  if isinstance(m,dict) and m.get('role')=='assistant'), '')
+    inside = re.search(r'continue inside|open meriverse|进入.*meriverse', lower)
+    accepted = re.fullmatch(r'yes(?: please)?[.!]?|sure[.!]?|好的|好', lower)
+    if inside or (accepted and 'Would you like to continue inside' in prior):
+        address = approach_address(question, plans, history)
+        plan = next((p for p in plans.values() if approach.normalized(p['building'].get('name','')) == approach.normalized(address.split(',')[0])), None)
+        if plan:
+            bid = plan['building'].get('id') or plan['building'].get('model_id')
+            return {'text':'Opening the Matterport walkthrough in MeriVerse.',
+                    'navigate':f'/walk?building={bid}', 'sources':[]}
+        return {'text':"I don't have a Matterport walkthrough for that address. You can open digital gallery to choose a mapped place.", 'sources':[]}
+    if re.search(r'front door|main entrance|building.?s entrance|describe.?approach|从.*街.*入口|怎么.*大门', lower):
+        address = approach_address(question, plans, history)
+        if not address:
+            return {'text':'Which street address would you like an aerial approach for?', 'sources':[]}
+        text = TOOLS['describe_approach'](address)
+        if text == approach.FAILURE:
+            return {'text':text, 'sources':[], 'mode':'describe_approach'}
+        return {'text':text + ' Would you like to continue inside MeriVerse?',
+                'sources':[{'type':'aerial','provider':'Vexcel','address':address}],
+                'suggestions':[{'label':'Continue inside · MeriVerse','question':f'continue inside MeriVerse at {address}'}],
+                'mode':'describe_approach'}
     if re.fullmatch(r"yes(?: please)?[.!]?|sure[.!]?|好的|好", lower):
         previous = next((str(m.get('text','')) for m in reversed(history if isinstance(history,list) else []) if isinstance(m,dict) and m.get('role')=='assistant'), '')
         if 'Your latest is in' in previous:

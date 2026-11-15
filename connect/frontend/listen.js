@@ -28,9 +28,12 @@
       : days < 31 ? "a few weeks ago" : days < 62 ? "last month" : "a while back";
   }
 
-  // ---------- tones ----------
+  // Optional interface earcons are disabled: speech and recordings play without extra beeps.
+  // This is gallery UI feedback only; it does not control hat/LiDAR warning audio.
+  const UI_SOUNDS = false;
   let ctx = null;
   function tone(f, dur, g = 0.12, when = 0) {
+    if (!UI_SOUNDS) return;
     try {
       ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
       if (ctx.state === "suspended") ctx.resume();

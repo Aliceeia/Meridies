@@ -71,3 +71,16 @@ test("one female voice stays fixed across warnings, location and detail", () => 
   }
   S.cancel();
 });
+
+test("Gemini short rate limits honor the server retry delay", async () => {
+  const original=globalThis.fetch;
+  globalThis.fetch=async()=>({status:429,json:async()=>({retryAfter:12})});
+  S._audioCache.clear();S._quotaUntil=0;
+  const before=Date.now();
+  try {
+    await assert.rejects(S._audioFor('Quota test.'),/quota/i);
+    assert.ok(S._quotaUntil>=before+12000 && S._quotaUntil<=Date.now()+12000);
+  } finally {
+    globalThis.fetch=original;S._quotaUntil=0;S._audioCache.clear();
+  }
+});

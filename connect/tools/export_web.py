@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 import math
@@ -285,22 +286,23 @@ def convert_voice(out: Path, allowed_keys: set[str]) -> list[str]:
     """Cached Gemini clips (WAV) -> MP3, named by voice.key(), so prepared lines play without the function."""
     src = voice.CACHE / voice.DEFAULT_VOICE
     dst = out / "media" / "voice"
-    dst.mkdir(parents=True)
+    dst.mkdir(parents=True, exist_ok=True)
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg or not src.exists():
         log("  ! ffmpeg or the voice cache is missing: no prepared voice clips (new lines still come from the function)")
         return []
-    keys = []
-    for wav in sorted(src.glob("*.wav")):
-        if wav.stem not in allowed_keys:
-            continue
+    def convert(wav):
         mp3 = dst / f"{wav.stem}.mp3"
-        r = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(wav), "-ac", "1", "-b:a", "48k", str(mp3)],
+        r = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(wav), "-threads", "1", "-ac", "1", "-b:a", "48k", str(mp3)],
                            capture_output=True)
         if r.returncode == 0 and mp3.exists():
-            keys.append(wav.stem)
+            return wav.stem
         else:
             mp3.unlink(missing_ok=True)
+            return None
+    sources = [wav for wav in sorted(src.glob("*.wav")) if wav.stem in allowed_keys]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        keys = [key for key in pool.map(convert, sources) if key]
     log(f"  {len(keys)} voice clips as MP3")
     return keys
 

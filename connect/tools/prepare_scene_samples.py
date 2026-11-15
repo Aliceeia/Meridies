@@ -1,7 +1,8 @@
 """Prepare public scene narration, then optionally synthesize missing Gemini audio.
 
 python connect/tools/prepare_scene_samples.py --generate
-Safe to resume: existing Sulafat clips are reused; stops on the first quota error.
+Safe to resume: existing Sulafat clips are reused; short limits honor RetryInfo.
+Stops on confirmed daily quota or persistent failures. --workers 3 bounds parallel work.
 No user memories, transcripts or circle information enter this public library.
 """
 import argparse
@@ -9,6 +10,8 @@ import json
 import re
 import random
 import sys
+import time
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -56,9 +59,25 @@ def build():
     return library
 
 
+def generate_sentence(text):
+    # Separate processes keep the driver's error/cooldown state local to a request.
+    for attempt in range(6):
+        try:
+            voice.ensure(text, 'calm', 'Sulafat', gemini_only=True)
+            return None
+        except voice.GeminiQuotaError as error:
+            if error.daily or error.retry_after > 60 or attempt == 5:
+                return 'daily quota' if error.daily else 'quota'
+            print(f'Short-term speech limit: waiting {error.retry_after:.0f}s before retry.', flush=True)
+            time.sleep(error.retry_after + 1)
+        except Exception as error:
+            return type(error).__name__
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--generate', action='store_true')
+    parser.add_argument('--workers', type=int, choices=range(1, 5), default=1)
     args = parser.parse_args()
     library = build()
     manifest = ROOT / 'connect/frontend/scene-samples.json'
@@ -71,26 +90,40 @@ def main():
     combinations = sum(len(p) for b in library['buildings'].values() for p in b['positions'].values())
     print(f'Manifest: {positions} positions, {combinations} position/facing combinations, {len(phrases)} unique sentences; {existing} cached.', flush=True)
     quota = False
-    if args.generate:
-        for text in phrases:
-            if voice.path_for(text, 'calm', 'Sulafat').exists():
-                continue
-            try:
-                voice.ensure(text, 'calm', 'Sulafat', gemini_only=True)
-                print('Generated one missing sentence.', flush=True)
-            except voice.GeminiQuotaError:
-                quota = True
-                print('STOP: Gemini speech quota reached. Run this command again when quota is available.', flush=True)
-                break
-            except Exception as error:
-                print(f'STOP: {type(error).__name__}; generation can be resumed.', flush=True)
-                break
-    ready = sum(voice.path_for(t, 'calm', 'Sulafat').exists() for t in phrases)
-    report = {'sentences': len(phrases), 'ready': ready, 'missing': len(phrases)-ready, 'quotaReached': quota}
     target = ROOT / 'connect/data/cache/scene-samples-progress.json'
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(report, indent=2), encoding='utf-8')
-    print(json.dumps(report), flush=True)
+    def report_progress():
+        ready = sum(voice.path_for(t, 'calm', 'Sulafat').exists() for t in phrases)
+        report = {'sentences': len(phrases), 'ready': ready, 'missing': len(phrases)-ready, 'quotaReached': quota}
+        target.write_text(json.dumps(report, indent=2), encoding='utf-8')
+        return report
+    report_progress()
+    if args.generate:
+        missing = iter(t for t in phrases if not voice.path_for(t, 'calm', 'Sulafat').exists())
+        stopped = False
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            pending = set()
+            def submit_next():
+                text = next(missing, None)
+                if text is not None:
+                    pending.add(pool.submit(generate_sentence, text))
+            for _ in range(args.workers):
+                submit_next()
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    error = future.result()
+                    if error:
+                        stopped = True
+                        quota = quota or 'quota' in error
+                        print(f'STOP: {error}; no new work will be submitted. Generation can be resumed.', flush=True)
+                    else:
+                        report = report_progress()
+                        print(f"Ready: {report['ready']}/{len(phrases)}", flush=True)
+                if not stopped:
+                    for _ in done:
+                        submit_next()
+    print(json.dumps(report_progress()), flush=True)
 
 
 if __name__ == '__main__':

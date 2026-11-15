@@ -60,7 +60,7 @@
     }
     if (p === "/api/voice" && q.get("text")) {
       const key = sha1(`v${C.promptVersion}|${C.voiceName}|${q.get("style") || "calm"}|${q.get("text").trim()}`).slice(0, 20);
-      return VOICE_KEYS.has(key) ? `/media/voice/${key}.mp3` : null;   // a new line: the function makes it
+      return VOICE_KEYS.has(key) ? `/media/voice/${key}.mp3?encoding=wav2` : null;   // a new line: the function makes it
     }
     if (p === "/scene-samples.json") return "/data/scene-samples.json";
     return null;

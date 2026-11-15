@@ -30,7 +30,7 @@ from . import gemini
 
 VOICES = ["Sulafat", "Aoede", "Zephyr", "Puck"]      # warm, light, bright, lively
 DEFAULT_VOICE = "Sulafat"
-# free tier: 10 requests per day PER MODEL, so every TTS model the key has is in the chain
+# Availability and quotas depend on the project's current tier; try supported models in order.
 # 2.5-pro follows the delivery notes best (A/B: exact transcript first try; 3.8-flash read its notes aloud twice)
 MODELS = ("gemini-2.5-pro-preview-tts", "gemini-2.5-flash-preview-tts", "gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview")
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache" / "voice"
@@ -65,6 +65,16 @@ def path_for(text: str, style: str, voice: str) -> Path:
 
 def wav(pcm: bytes, rate: int = RATE) -> bytes:
     """16-bit mono PCM -> WAV with the true sample rate in its header."""
+    # Some Gemini TTS models return a complete WAV (including C2PA chunks),
+    # even when the MIME label says audio/L16. Preserve that container intact.
+    # Wrapping it as PCM makes the RIFF header and provenance chunks audible.
+    if pcm[:4] == b'RIFF' and pcm[8:12] == b'WAVE':
+        import io
+        import wave
+        with wave.open(io.BytesIO(pcm), 'rb') as audio:
+            if audio.getcomptype() != 'NONE':
+                raise ValueError('Unsupported Gemini WAV encoding')
+        return pcm
     return (b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVE" + b"fmt " +
             struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16) + b"data" + struct.pack("<I", len(pcm)) + pcm)
 
@@ -92,6 +102,7 @@ def _synth_once(prompt: str, voice: str, timeout: int) -> bytes:
             "generationConfig": {"responseModalities": ["AUDIO"],
                                  "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
     err = None
+    quota_errors = []
     for model in MODELS:
         req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                                      method="POST", data=json.dumps(body).encode(),
@@ -107,6 +118,18 @@ def _synth_once(prompt: str, voice: str, timeout: int) -> bytes:
         except urllib.error.HTTPError as e:
             err = e
             last_error = f"{model}: HTTP {e.code}"
+            if e.code == 429:
+                retry, daily = 60.0, False
+                try:
+                    details = json.loads(e.read()).get('error', {}).get('details', [])
+                    for detail in details:
+                        if 'RetryInfo' in detail.get('@type', ''):
+                            retry = max(1.0, float(detail.get('retryDelay', '60s').rstrip('s')))
+                        for violation in detail.get('violations', []):
+                            daily |= 'per_day' in violation.get('quotaMetric', '').lower() or 'perday' in violation.get('quotaId', '').lower()
+                except (ValueError, TypeError):
+                    pass
+                quota_errors.append((retry, daily))
             if e.code in (429, 404, 503):
                 continue
             raise
@@ -114,11 +137,18 @@ def _synth_once(prompt: str, voice: str, timeout: int) -> bytes:
             err = e
             last_error = f"{model}: {type(e).__name__}"
             continue
+    if len(quota_errors) == len(MODELS):
+        raise GeminiQuotaError('All Gemini speech models currently report quota errors',
+                               retry_after=min(q[0] for q in quota_errors),
+                               daily=all(q[1] for q in quota_errors)) from None
     raise err
 
 
 def seconds_of(wav_bytes: bytes) -> float:
-    return (len(wav_bytes) - 44) / (2 * struct.unpack("<I", wav_bytes[24:28])[0])
+    import io
+    import wave
+    with wave.open(io.BytesIO(wav_bytes), 'rb') as audio:
+        return audio.getnframes() / audio.getframerate()
 
 
 def plausible(text: str, wav_bytes: bytes) -> bool:
@@ -130,7 +160,7 @@ def plausible(text: str, wav_bytes: bytes) -> bool:
 # ---------- second human voice when Gemini TTS is out of quota: Microsoft neural (edge-tts), no daily cap ----------
 EDGE_VOICE = "en-US-EmmaMultilingualNeural"
 EDGE_PACE = {"alert": "+8%", "calm": "-3%", "mixed": "+2%", "plain": "+0%"}
-gemini_blocked_until = 0.0            # set when every TTS model answers 429 (daily cap); then go straight to edge
+gemini_blocked_until = 0.0            # all models returned 429; honor the shortest RetryInfo delay
 
 
 def edge_path(text: str, style: str, voice: str) -> Path:
@@ -222,6 +252,11 @@ def now(text: str, style: str, voice: str) -> Path:
 class GeminiQuotaError(Exception):
     code = 429
 
+    def __init__(self, message, retry_after=60, daily=False):
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.daily = daily
+
 
 def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE, gemini_only: bool = False) -> Path:
     """The clip on disk, generating it if missing: Gemini first; when Gemini is out of quota (or fails), the
@@ -231,16 +266,16 @@ def ensure(text: str, style: str = "calm", voice: str = DEFAULT_VOICE, gemini_on
     if p.exists():
         return p
     if gemini_only and not gemini_available():
-        raise GeminiQuotaError("Gemini speech quota is temporarily exhausted")
+        raise GeminiQuotaError("Gemini speech quota is temporarily exhausted", retry_after=max(1, gemini_blocked_until-time.time()))
     if gemini_available() or gemini_only:
         try:
             return _write(p, synth(text, style, voice))
-        except Exception:  # noqa: BLE001
-            if "429" in str(last_error):
-                gemini_blocked_until = time.time() + 3600     # daily cap: stop asking for an hour
+        except GeminiQuotaError as error:
+            gemini_blocked_until = time.time() + error.retry_after
             if gemini_only:
-                if "429" in str(last_error):
-                    raise GeminiQuotaError("Gemini speech quota is temporarily exhausted") from None
+                raise
+        except Exception:
+            if gemini_only:
                 raise
     e = edge_path(text, style, voice)
     return e if e.exists() else _write(e, synth_edge(text, style))

@@ -586,8 +586,10 @@ class Handler(BaseHTTPRequestHandler):
             if p is None and q.get("wait") == "1":
                 try:
                     p = voice.ensure(text, style, v, gemini_only=True)
-                except voice.GeminiQuotaError:
-                    return self.err(429, "Gemini speech quota reached. Cached audio still works; new speech requires quota to be available.")
+                except voice.GeminiQuotaError as error:
+                    return self.send(429, {"error": "Gemini speech quota reached. Cached audio still works.",
+                                           "retryAfter": max(1, int(error.retry_after + 0.999)),
+                                           "daily": error.daily})
                 except Exception:
                     return self.err(503, "Gemini voice is temporarily unavailable")
             if p:
