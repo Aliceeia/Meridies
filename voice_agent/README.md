@@ -55,7 +55,8 @@ Meri only listens after you say **"Hey Meri"**. A rising two-tone chime means sh
 
 - Detection runs **offline on the Pi** with Vosk (`wake.py`), limited to the wake phrase plus decoys such as "hey everybody". It uses no Gemini quota, and audio isn't sent anywhere until the wake word is heard. The ~40 MB model downloads itself into `models/` on first run.
 - Until the wake word is heard, and while Meri is answering, Gemini receives **silence**. This is what fixed the answers cutting off mid-sentence: the LiDAR beeps leaked into the mic, and Gemini treated them as the person interrupting.
-- Flags: `--no-wake` (always listening, the old behaviour), `--listen-window 8`, and `--followup 0` (seconds to accept a follow-up without the wake word).
+- Flags: `--no-wake` (always listening, the old behaviour), `--listen-window 8`, `--followup 0` (seconds to accept a follow-up without the wake word), and `--preroll 0`.
+- Only audio from **after** the wake word reaches Gemini (`--preroll 0`). Before, the 1.5 s before detection, which is the wake phrase itself, was sent too. Anyone who paused for the chime then got a reply to the bare "Hey Meri" ("Hello, I'm here"), and the mic closed before their question, so Meri seemed to answer only once. `--preroll 0.5` brings a little of that audio back for people who say "Hey Meri, what's this?" in one breath.
 - Measured on the Pi, with beeps mixed into the mic throughout: 6/6 wake phrases caught, 0/8 look-alikes triggered it, and 0 false interruptions during long answers.
 
 ## Things to say (each one starts with "Hey Meri")

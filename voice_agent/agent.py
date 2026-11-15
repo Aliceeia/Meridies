@@ -339,9 +339,10 @@ class Agent:
                 await s.send_realtime_input(audio=blob(pcm))
                 continue
             self.wake.feed(pcm)
-            if self.flush_preroll:                             # the wake phrase + whatever followed it
+            if self.flush_preroll:                             # the last --preroll s before detection
                 self.flush_preroll = False
-                for chunk in list(self.preroll):
+                keep = int(self.a.preroll * IN_RATE / 512)
+                for chunk in list(self.preroll)[-keep:] if keep else []:
                     await s.send_realtime_input(audio=blob(chunk))
                 self.preroll.clear()
             self.preroll.append(pcm)
@@ -360,7 +361,10 @@ class Agent:
             self.generating = False
         self.spk.tone(660, 0.07, 0.07); self.spk.tone(990, 0.09, 0.07)   # "I'm listening" earcon
         self.gate_until = time.time() + self.a.listen_window
-        self.flush_preroll = True
+        # Off by default: the pre-roll IS the wake phrase, and when the person pauses for the chime
+        # Gemini's VAD ends the turn on a bare "Hey Meri", answers it ("Hello, I'm here"), and the
+        # gate then closes before the real question is spoken.
+        self.flush_preroll = self.a.preroll > 0
         self.ui("tool", "[wake] Hey Meri -> listening")
         self._status()
 
@@ -479,6 +483,10 @@ def main():
     ap.add_argument("--no-wake", action="store_true", help="always listening (no 'Hey Meri' needed)")
     ap.add_argument("--listen-window", type=float, default=8.0, help="seconds the mic stays open after 'Hey Meri'")
     ap.add_argument("--followup", type=float, default=0.0, help="seconds to accept a follow-up without the wake word")
+    ap.add_argument("--preroll", type=float, default=0.0,
+                    help="seconds of audio from just before 'Hey Meri' to forward (max 1.5). >0 helps "
+                         "'Hey Meri, <request>' said in one breath, but a pause after the wake word then "
+                         "gets answered on its own")
     ap.add_argument("--web", type=int, metavar="PORT", help="use the laptop browser as mic+speaker (http://localhost:PORT)")
     ap.add_argument("--mute", action="store_true", help="no audio output (print transcripts only)")
     ap.add_argument("--guide-interval", type=float, default=2.0, help="seconds between guidance steps")
