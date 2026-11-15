@@ -277,6 +277,7 @@ class Agent:
             try:
                 async with client.aio.live.connect(model=self.a.model, config=self.live_config()) as s:
                     self.session = s
+                    self._fails = 0
                     print(f"[live] connected to {self.a.model}. " + ("Type and press Enter." if self.a.text
                           else "Talk in the browser." if self.a.web else "Talk into the headset. Ctrl+C to quit."))
                     if self.web:
@@ -296,8 +297,16 @@ class Agent:
             except (KeyboardInterrupt, asyncio.CancelledError):
                 return
             except Exception as e:
-                print(f"[live] session ended: {e!r}; reconnecting in 1 s")
-                await asyncio.sleep(1)
+                # a resumption handle only lives a few minutes: after a failed reconnect start a fresh session
+                stale = self.resume_handle is not None
+                self.resume_handle = None
+                fails = getattr(self, "_fails", 0) + 1
+                self._fails = fails
+                wait = 0.5 if stale and fails == 1 else min(30, 2 ** min(fails, 5))
+                print(f"[live] session ended: {e!r}; {'fresh session' if stale else 'retrying'} in {wait:.0f} s", flush=True)
+                if self.web:
+                    self.web.send("status", "reconnecting to Gemini…")
+                await asyncio.sleep(wait)
             finally:
                 self.session = None
         if mic:
